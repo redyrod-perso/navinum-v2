@@ -1,0 +1,24 @@
+admin_rfid_index:
+    path: /admin/rfids
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_rfid
+    methods: [GET]
+admin_rfid_index_trailing:
+    path: /admin/rfids/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_rfid
+    methods: [GET]
+admin_rfid_new:
+    path: /admin/rfids/new
+    controller: App\Controller\Admin\RfidAdminController::new
+    methods: [GET, POST]
+admin_rfid_edit:
+    path: /admin/rfids/{id}/edit
+    controller: App\Controller\Admin\RfidAdminController::edit
+    methods: [GET, POST]
+admin_rfid_delete:
+    path: /admin/rfids/{id}
+    controller: App\Controller\Admin\RfidAdminController::delete
+    methods: [POST]

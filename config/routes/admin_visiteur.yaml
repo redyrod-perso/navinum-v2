@@ -1,0 +1,24 @@
+admin_visiteur_index:
+    path: /admin/visiteurs
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_visiteur
+    methods: [GET]
+admin_visiteur_index_trailing:
+    path: /admin/visiteurs/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_visiteur
+    methods: [GET]
+admin_visiteur_new:
+    path: /admin/visiteurs/new
+    controller: App\Controller\Admin\VisiteurAdminController::new
+    methods: [GET, POST]
+admin_visiteur_edit:
+    path: /admin/visiteurs/{id}/edit
+    controller: App\Controller\Admin\VisiteurAdminController::edit
+    methods: [GET, POST]
+admin_visiteur_delete:
+    path: /admin/visiteurs/{id}
+    controller: App\Controller\Admin\VisiteurAdminController::delete
+    methods: [POST]

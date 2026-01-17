@@ -1,0 +1,24 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block content %}
+  <div class="ui container">
+    <h2 class="ui header">{{ title }}</h2>
+    {{ form_start(form, {attr: {class: 'ui form'}}) }}
+      {{ form_row(form.type) }}
+      {{ form_row(form.groupe) }}
+      <div class="three fields">
+        <div class="field">{{ form_row(form.valeur1) }}</div>
+        <div class="field">{{ form_row(form.valeur2) }}</div>
+        <div class="field">{{ form_row(form.valeur3) }}</div>
+      </div>
+      <div class="three fields">
+        <div class="field">{{ form_row(form.isActive) }}</div>
+        <div class="field">{{ form_row(form.isResettable) }}</div>
+        <div class="field">{{ form_row(form.isTosync) }}</div>
+      </div>
+      <button class="ui primary button" type="submit">Enregistrer</button>
+      <a class="ui button" href="{{ path('admin_rfid_index') }}">Annuler</a>
+    {{ form_end(form) }}
+  </div>
+{% endblock %}
+

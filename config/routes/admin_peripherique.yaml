@@ -1,0 +1,24 @@
+admin_peripherique_index:
+    path: /admin/peripheriques
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_peripherique
+    methods: [GET]
+admin_peripherique_index_trailing:
+    path: /admin/peripheriques/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_peripherique
+    methods: [GET]
+admin_peripherique_new:
+    path: /admin/peripheriques/new
+    controller: App\Controller\Admin\PeripheriqueAdminController::new
+    methods: [GET, POST]
+admin_peripherique_edit:
+    path: /admin/peripheriques/{id}/edit
+    controller: App\Controller\Admin\PeripheriqueAdminController::edit
+    methods: [GET, POST]
+admin_peripherique_delete:
+    path: /admin/peripheriques/{id}
+    controller: App\Controller\Admin\PeripheriqueAdminController::delete
+    methods: [POST]

@@ -1,0 +1,104 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block title %}Administration - Navinum{% endblock %}
+
+{% block pre_content %}
+  {# Menu de navigation principal #}
+  <div class="ui inverted menu" style="border-radius: 0; margin: 0;">
+    <div class="ui container">
+      <a class="header item" href="/admin">
+        <i class="home icon"></i>
+        Navinum Admin
+      </a>
+      <a class="item" href="/admin/expositions">
+        <i class="image icon"></i>
+        Expositions
+      </a>
+      <a class="item" href="/admin/interactifs">
+        <i class="tv icon"></i>
+        Interactifs
+      </a>
+      <a class="item" href="/admin/parcours">
+        <i class="route icon"></i>
+        Parcours
+      </a>
+      <a class="item" href="/admin/visiteurs">
+        <i class="users icon"></i>
+        Visiteurs
+      </a>
+      <a class="item" href="/admin/rfids">
+        <i class="id card icon"></i>
+        RFID
+      </a>
+      <div class="right menu">
+        <a class="item" href="/logout">
+          <i class="sign out icon"></i>
+          Déconnexion
+        </a>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block content %}
+  <div class="ui container">
+    {# En-tête avec bouton de création #}
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1em;">
+      <h1 class="ui header" style="margin: 0;">
+        <i class="list icon"></i>
+        <div class="content">
+          Liste
+          <div class="sub header">Gestion des données</div>
+        </div>
+      </h1>
+
+      {# Bouton de création dynamique basé sur la route actuelle #}
+      {% set current_route = app.request.attributes.get('_route') %}
+      {% set create_route = '' %}
+      {% set entity_name = '' %}
+      {% set entity_icon = 'plus' %}
+
+      {% if 'exposition' in current_route %}
+        {% set create_route = 'admin_exposition_new' %}
+        {% set entity_name = 'Exposition' %}
+        {% set entity_icon = 'image' %}
+      {% elseif 'interactif' in current_route %}
+        {% set create_route = 'admin_interactif_new' %}
+        {% set entity_name = 'Interactif' %}
+        {% set entity_icon = 'tv' %}
+      {% elseif 'parcours' in current_route %}
+        {% set create_route = 'admin_parcours_new' %}
+        {% set entity_name = 'Parcours' %}
+        {% set entity_icon = 'route' %}
+      {% elseif 'visiteur' in current_route %}
+        {% set create_route = 'admin_visiteur_new' %}
+        {% set entity_name = 'Visiteur' %}
+        {% set entity_icon = 'user' %}
+      {% elseif 'rfid' in current_route %}
+        {% set create_route = 'admin_rfid_new' %}
+        {% set entity_name = 'RFID' %}
+        {% set entity_icon = 'id card' %}
+      {% elseif 'flotte' in current_route %}
+        {% set create_route = 'admin_flotte_new' %}
+        {% set entity_name = 'Flotte' %}
+        {% set entity_icon = 'tablet' %}
+      {% elseif 'peripherique' in current_route %}
+        {% set create_route = 'admin_peripherique_new' %}
+        {% set entity_name = 'Périphérique' %}
+        {% set entity_icon = 'plug' %}
+      {% endif %}
+
+      {% if create_route %}
+        <a href="{{ path(create_route) }}" class="ui primary button">
+          <i class="{{ entity_icon }} icon"></i>
+          Créer {{ entity_name }}
+        </a>
+      {% endif %}
+    </div>
+
+    <div class="ui divider"></div>
+
+    {{ sylius_grid_render(grid) }}
+  </div>
+{% endblock %}
+

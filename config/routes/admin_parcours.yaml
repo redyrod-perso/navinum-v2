@@ -1,0 +1,62 @@
+admin_parcours_index:
+    path: /admin/parcours
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_parcours
+    methods: [GET]
+
+admin_parcours_index_trailing:
+    path: /admin/parcours/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_parcours
+    methods: [GET]
+
+admin_parcours_new:
+    path: /admin/parcours/new
+    controller: App\Controller\Admin\ParcoursAdminController::new
+    methods: [GET, POST]
+
+admin_parcours_show:
+    path: /admin/parcours/{id}
+    controller: App\Controller\Admin\ParcoursAdminController::show
+    methods: [GET]
+    requirements:
+        id: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+admin_parcours_edit:
+    path: /admin/parcours/{id}/edit
+    controller: App\Controller\Admin\ParcoursAdminController::edit
+    methods: [GET, POST]
+    requirements:
+        id: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+admin_parcours_delete:
+    path: /admin/parcours/{id}
+    controller: App\Controller\Admin\ParcoursAdminController::delete
+    methods: [POST]
+    requirements:
+        id: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+
+# Routes API pour les fonctionnalités avancées
+admin_parcours_api:
+    path: /admin/api/parcours/active
+    controller: App\Controller\Admin\ParcoursController::getActiveParcoursAction
+    methods: [GET]
+
+admin_parcours_validate_libelle:
+    path: /admin/api/parcours/validate-libelle
+    controller: App\Controller\Admin\ParcoursController::validateLibelleAction
+    methods: [GET]
+
+admin_parcours_reorder:
+    path: /admin/api/parcours/reorder
+    controller: App\Controller\Admin\ParcoursController::reorderAction
+    methods: [POST]
+
+admin_parcours_duplicate:
+    path: /admin/parcours/{id}/duplicate
+    controller: App\Controller\Admin\ParcoursController::duplicateAction
+    methods: [POST]
+    requirements:
+        id: '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'

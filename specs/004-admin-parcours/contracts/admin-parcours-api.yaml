@@ -1,0 +1,501 @@
+openapi: 3.0.3
+info:
+  title: API Administration des Parcours - Navinum
+  description: Contrats API pour la gestion des parcours muséaux via interface Sylius
+  version: 1.0.0
+  contact:
+    name: Équipe Navinum
+    
+servers:
+  - url: https://navinum.local/admin
+    description: Serveur de développement
+  - url: https://navinum.prod/admin  
+    description: Serveur de production
+
+paths:
+  /parcours:
+    get:
+      summary: Liste des parcours avec pagination et filtres
+      tags: [Parcours Admin]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Numéro de page pour pagination
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+            maximum: 100
+          description: Nombre d'éléments par page
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Recherche par libellé
+        - name: is_tosync
+          in: query
+          schema:
+            type: boolean
+          description: Filtre par statut synchronisation
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [libelle, ordre, createdAt]
+            default: ordre
+          description: Champ de tri
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+          description: Direction du tri
+      responses:
+        '200':
+          description: Liste paginée des parcours
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ParcoursListItem'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+                  
+    post:
+      summary: Création d'un nouveau parcours
+      tags: [Parcours Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParcoursCreateRequest'
+      responses:
+        '201':
+          description: Parcours créé avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcoursDetail'
+        '400':
+          description: Erreur de validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Libellé déjà existant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parcours/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Identifiant UUID du parcours
+        
+    get:
+      summary: Détails d'un parcours spécifique
+      tags: [Parcours Admin]
+      responses:
+        '200':
+          description: Détails du parcours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcoursDetail'
+        '404':
+          description: Parcours non trouvé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+                
+    put:
+      summary: Modification complète d'un parcours
+      tags: [Parcours Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParcoursUpdateRequest'
+      responses:
+        '200':
+          description: Parcours modifié avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcoursDetail'
+        '400':
+          description: Erreur de validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '404':
+          description: Parcours non trouvé
+          
+    patch:
+      summary: Modification partielle d'un parcours
+      tags: [Parcours Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParcoursPatchRequest'
+      responses:
+        '200':
+          description: Parcours modifié avec succès
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParcoursDetail'
+                
+    delete:
+      summary: Suppression d'un parcours
+      tags: [Parcours Admin]
+      responses:
+        '204':
+          description: Parcours supprimé avec succès
+        '404':
+          description: Parcours non trouvé
+        '409':
+          description: Parcours ne peut être supprimé (contraintes métier)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /parcours/{id}/expositions:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Identifiant UUID du parcours
+        
+    get:
+      summary: Liste des expositions associées au parcours
+      tags: [Relations Parcours]
+      responses:
+        '200':
+          description: Expositions du parcours
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpositionSummary'
+                  
+    put:
+      summary: Mise à jour des expositions associées
+      tags: [Relations Parcours]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                exposition_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Associations mises à jour
+          
+  /parcours/{id}/interactifs:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Identifiant UUID du parcours
+        
+    get:
+      summary: Liste des interactifs associés au parcours
+      tags: [Relations Parcours]
+      responses:
+        '200':
+          description: Interactifs du parcours
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InteractifSummary'
+                  
+    put:
+      summary: Mise à jour des interactifs associés
+      tags: [Relations Parcours]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                interactif_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: Associations mises à jour
+
+  /expositions/select:
+    get:
+      summary: Liste d'expositions pour sélection dans formulaires
+      tags: [Ressources Annexes]
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Recherche par libellé exposition
+      responses:
+        '200':
+          description: Liste des expositions disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SelectOption'
+
+  /interactifs/select:
+    get:
+      summary: Liste d'interactifs pour sélection dans formulaires
+      tags: [Ressources Annexes] 
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Recherche par libellé interactif
+      responses:
+        '200':
+          description: Liste des interactifs disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SelectOption'
+
+components:
+  schemas:
+    ParcoursListItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        libelle:
+          type: string
+          maxLength: 255
+        ordre:
+          type: integer
+          nullable: true
+        is_tosync:
+          type: boolean
+        expositions_count:
+          type: integer
+          description: Nombre d'expositions associées
+        interactifs_count:
+          type: integer
+          description: Nombre d'interactifs associés
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          
+    ParcoursDetail:
+      allOf:
+        - $ref: '#/components/schemas/ParcoursListItem'
+        - type: object
+          properties:
+            expositions:
+              type: array
+              items:
+                $ref: '#/components/schemas/ExpositionSummary'
+            interactifs:
+              type: array
+              items:
+                $ref: '#/components/schemas/InteractifSummary'
+                
+    ParcoursCreateRequest:
+      type: object
+      required: [libelle]
+      properties:
+        libelle:
+          type: string
+          maxLength: 255
+          minLength: 1
+        ordre:
+          type: integer
+          minimum: 0
+          nullable: true
+        is_tosync:
+          type: boolean
+          default: true
+        exposition_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        interactif_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+            
+    ParcoursUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/ParcoursCreateRequest'
+        
+    ParcoursPatchRequest:
+      type: object
+      properties:
+        libelle:
+          type: string
+          maxLength: 255
+          minLength: 1
+        ordre:
+          type: integer
+          minimum: 0
+          nullable: true
+        is_tosync:
+          type: boolean
+          
+    ExpositionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        libelle:
+          type: string
+        description:
+          type: string
+          nullable: true
+        date_debut:
+          type: string
+          format: date-time
+          nullable: true
+        date_fin:
+          type: string
+          format: date-time
+          nullable: true
+          
+    InteractifSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        libelle:
+          type: string
+        description:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        duree_estimee:
+          type: integer
+          nullable: true
+          description: Durée en minutes
+          
+    SelectOption:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+          description: Libellé à afficher dans l'interface
+          
+    Pagination:
+      type: object
+      properties:
+        current_page:
+          type: integer
+        total_pages:
+          type: integer
+        total_items:
+          type: integer
+        items_per_page:
+          type: integer
+        has_previous:
+          type: boolean
+        has_next:
+          type: boolean
+          
+    ValidationError:
+      type: object
+      properties:
+        type:
+          type: string
+          example: "validation_error"
+        message:
+          type: string
+          example: "Les données fournies ne sont pas valides"
+        violations:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+              invalid_value:
+                nullable: true
+                
+    Error:
+      type: object
+      properties:
+        type:
+          type: string
+        message:
+          type: string
+        code:
+          type: integer
+          
+  securitySchemes:
+    AdminSession:
+      type: apiKey
+      in: cookie
+      name: PHPSESSID
+      description: Session d'administration Symfony
+      
+security:
+  - AdminSession: []

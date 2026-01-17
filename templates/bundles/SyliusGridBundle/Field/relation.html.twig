@@ -1,0 +1,5 @@
+{% if data is not null %}
+    {{ attribute(data, vars.property) }}
+{% else %}
+    <span class="ui grey text">-</span>
+{% endif %}

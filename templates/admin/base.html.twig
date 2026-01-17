@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    
+    <title>{% block title %}Navinum Admin{% endblock %}</title>
+    
+    <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+
+    {% block metatags %}
+    {% endblock %}
+
+    {% block stylesheets %}
+        {# Semantic UI CSS #}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
+        {# Font Awesome pour les icônes #}
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+        <style>
+            body {
+                background-color: #f8f9fa;
+                font-family: 'Lato', 'Helvetica Neue', Arial, Helvetica, sans-serif;
+            }
+            
+            /* Menu principal */
+            .admin-menu {
+                margin: 0;
+                border-radius: 0;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            /* Contenu principal */
+            .main-content {
+                margin-top: 1em;
+                padding: 0 1em;
+            }
+            
+            /* Tables responsives */
+            .ui.table {
+                font-size: 0.9em;
+            }
+            
+            /* Boutons d'action */
+            .action-buttons .ui.button {
+                padding: 0.5em 1em;
+                margin: 0 0.2em;
+            }
+            
+            /* Cards */
+            .ui.card {
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            
+            /* Messages flash */
+            .flash-messages {
+                margin: 1em 0;
+            }
+            
+            /* Style pour les breadcrumbs */
+            .ui.breadcrumb {
+                margin-bottom: 1.5em;
+            }
+            
+            /* Amélioration des formulaires */
+            .ui.form .field > label {
+                font-weight: 600;
+                color: rgba(0,0,0,0.87);
+            }
+        </style>
+    {% endblock %}
+</head>
+<body>
+    {% block navigation %}
+    <div class="ui inverted blue menu admin-menu">
+        <div class="ui container">
+            <a class="header item" href="{{ path('admin_dashboard') }}">
+                <i class="cogs icon"></i>
+                Navinum Admin
+            </a>
+            <a class="item" href="{{ path('admin_exposition_index') }}">
+                <i class="calendar alternate outline icon"></i>
+                Expositions
+            </a>
+            <a class="item" href="{{ path('admin_interactif_index') }}">
+                <i class="gamepad icon"></i>
+                Interactifs
+            </a>
+            <a class="item" href="{{ path('admin_admin_parcours_index') }}">
+                <i class="route icon"></i>
+                Parcours
+            </a>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block flash_messages %}
+    <div class="flash-messages">
+        {% for label, messages in app.flashes %}
+            {% for message in messages %}
+                <div class="ui {{ label == 'error' ? 'negative' : (label == 'success' ? 'positive' : 'info') }} message">
+                    <i class="close icon"></i>
+                    <div class="header">
+                        {% if label == 'success' %}
+                            <i class="checkmark icon"></i>
+                            Succès
+                        {% elseif label == 'error' %}
+                            <i class="times icon"></i>
+                            Erreur
+                        {% else %}
+                            <i class="info icon"></i>
+                            Information
+                        {% endif %}
+                    </div>
+                    <p>{{ message }}</p>
+                </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+    {% endblock %}
+
+    <div class="main-content">
+        <div class="ui container">
+            {% block content %}
+            {% endblock %}
+        </div>
+    </div>
+
+    {% block javascripts %}
+        {# jQuery (required by Semantic UI) #}
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+        {# Semantic UI JS #}
+        <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.js"></script>
+        
+        <script>
+            $(document).ready(function() {
+                // Messages flash fermables
+                $('.message .close').on('click', function() {
+                    $(this).closest('.message').transition('fade');
+                });
+                
+                // Auto-fermeture des messages après 5 secondes
+                setTimeout(function() {
+                    $('.message').transition('fade');
+                }, 5000);
+                
+                // Activation des dropdowns
+                $('.ui.dropdown').dropdown();
+                
+                // Activation des modals
+                $('.ui.modal').modal();
+                
+                // Confirmation de suppression
+                $('.delete-confirm').on('click', function(e) {
+                    e.preventDefault();
+                    var $this = $(this);
+                    $('.ui.basic.modal')
+                        .modal({
+                            closable: false,
+                            onDeny: function() {
+                                return true;
+                            },
+                            onApprove: function() {
+                                window.location.href = $this.attr('href');
+                            }
+                        })
+                        .modal('show');
+                });
+            });
+        </script>
+    {% endblock %}
+</body>
+</html>

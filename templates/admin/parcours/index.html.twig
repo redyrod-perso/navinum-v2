@@ -1,0 +1,65 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Gestion des Parcours{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="fas fa-route"></i> Gestion des Parcours
+                    </h1>
+                    <p class="text-muted mb-0">
+                        Administrez les parcours de visite muséaux
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ path('admin_admin_parcours_create') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Nouveau Parcours
+                    </a>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <div class="row align-items-center">
+                        <div class="col">
+                            <h4 class="card-title mb-0">
+                                <i class="fas fa-list"></i> Liste des Parcours
+                            </h4>
+                        </div>
+                        <div class="col-auto">
+                            <span class="badge badge-light">
+                                {{ resources.data|length }} parcours
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-0">
+                    {{ sylius_grid_render(resources) }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Confirmation de suppression
+            const deleteButtons = document.querySelectorAll('[data-confirms-action="delete"]');
+            deleteButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    if (!confirm('Êtes-vous sûr de vouloir supprimer ce parcours ?')) {
+                        e.preventDefault();
+                    }
+                });
+            });
+        });
+    </script>
+{% endblock %}

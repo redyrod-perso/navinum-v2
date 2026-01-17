@@ -1,0 +1,35 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block content %}
+  <div class="ui container">
+    <h2 class="ui header">Expositions</h2>
+    <a class="ui primary button" href="{{ path('admin_exposition_new') }}">Nouvelle exposition</a>
+    <table class="ui celled table">
+      <thead>
+        <tr>
+          <th>Libellé</th>
+          <th>Créé le</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for item in items %}
+        <tr>
+          <td>{{ item.libelle }}</td>
+          <td>{{ item.createdAt|date('Y-m-d H:i') }}</td>
+          <td>
+            <a class="ui button" href="{{ path('admin_exposition_edit', {id: item.id}) }}">Modifier</a>
+            <form method="post" action="{{ path('admin_exposition_delete', {id: item.id}) }}" style="display:inline" onsubmit="return confirm('Supprimer ?');">
+              <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ item.id) }}">
+              <button class="ui red button" type="submit">Supprimer</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="3">Aucune exposition</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}
+

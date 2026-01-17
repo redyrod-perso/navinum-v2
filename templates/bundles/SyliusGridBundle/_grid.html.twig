@@ -1,0 +1,122 @@
+{# Default grid template for Sylius Grid Bundle #}
+<div class="ui segment">
+    {% if grid.data|length > 0 %}
+        <table class="ui celled striped table">
+            <thead>
+                <tr>
+                    {% for field in grid.definition.enabledFields %}
+                        <th>{{ field.label|trans }}</th>
+                    {% endfor %}
+                    <th class="center aligned">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in grid.data %}
+                    <tr>
+                        {% for field in grid.definition.enabledFields %}
+                            <td>
+                                {{ sylius_grid_render_field(grid, field, row) }}
+                            </td>
+                        {% endfor %}
+                        <td class="center aligned">
+                            {# Détermination dynamique des routes d'édition et suppression #}
+                            {% set current_route = app.request.attributes.get('_route') %}
+                            {% set edit_route = '' %}
+                            {% set delete_route = '' %}
+
+                            {% if 'exposition' in current_route %}
+                                {% set edit_route = 'admin_exposition_edit' %}
+                                {% set delete_route = 'admin_exposition_delete' %}
+                            {% elseif 'interactif' in current_route %}
+                                {% set edit_route = 'admin_interactif_edit' %}
+                                {% set delete_route = 'admin_interactif_delete' %}
+                            {% elseif 'visiteur' in current_route %}
+                                {% set edit_route = 'admin_visiteur_edit' %}
+                                {% set delete_route = 'admin_visiteur_delete' %}
+                            {% elseif 'rfid' in current_route %}
+                                {% set edit_route = 'admin_rfid_edit' %}
+                                {% set delete_route = 'admin_rfid_delete' %}
+                            {% elseif 'flotte' in current_route %}
+                                {% set edit_route = 'admin_flotte_edit' %}
+                                {% set delete_route = 'admin_flotte_delete' %}
+                            {% elseif 'peripherique' in current_route %}
+                                {% set edit_route = 'admin_peripherique_edit' %}
+                                {% set delete_route = 'admin_peripherique_delete' %}
+                            {% endif %}
+
+                            <div class="ui small basic icon buttons">
+                                {% if edit_route %}
+                                    <a href="{{ path(edit_route, {'id': row.id}) }}" class="ui button" title="Éditer">
+                                        <i class="edit icon"></i>
+                                    </a>
+                                {% endif %}
+                                {% if delete_route %}
+                                    <button type="button" class="ui button delete-button" data-id="{{ row.id }}" data-route="{{ path(delete_route, {'id': row.id}) }}" title="Supprimer">
+                                        <i class="trash icon"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="ui warning message">
+            <div class="header">
+                Aucun résultat
+            </div>
+            <p>Aucune donnée n'a été trouvée.</p>
+        </div>
+    {% endif %}
+
+    {# Pagination placeholder - can be enhanced later #}
+    {% if grid.data|length > 0 %}
+        <div class="ui center aligned basic segment">
+            <div class="ui pagination menu">
+                <a class="item">1</a>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+{# Modal de confirmation de suppression #}
+<div class="ui mini modal" id="deleteModal">
+    <div class="header">
+        <i class="warning sign icon"></i>
+        Confirmer la suppression
+    </div>
+    <div class="content">
+        <p>Êtes-vous sûr de vouloir supprimer cet élément ? Cette action est irréversible.</p>
+    </div>
+    <div class="actions">
+        <div class="ui cancel button">
+            <i class="remove icon"></i>
+            Annuler
+        </div>
+        <form method="post" id="deleteForm" style="display: inline;">
+            <button type="submit" class="ui negative button">
+                <i class="trash icon"></i>
+                Supprimer
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestion de la suppression avec modal de confirmation
+    const deleteButtons = document.querySelectorAll('.delete-button');
+    const deleteModal = document.getElementById('deleteModal');
+    const deleteForm = document.getElementById('deleteForm');
+
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const deleteRoute = this.getAttribute('data-route');
+            deleteForm.action = deleteRoute;
+            $('#deleteModal').modal('show');
+        });
+    });
+});
+</script>

@@ -1,0 +1,207 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Modifier le Parcours "{{ resource.libelle }}"{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ path('admin_admin_parcours_index') }}">
+                            <i class="fas fa-route"></i> Parcours
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">
+                        {{ resource.libelle }}
+                    </li>
+                </ol>
+            </nav>
+
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="fas fa-edit"></i> Modifier "{{ resource.libelle }}"
+                    </h1>
+                    <p class="text-muted mb-0">
+                        Modifiez les informations de ce parcours
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ path('admin_admin_parcours_show', {'id': resource.id}) }}" class="btn btn-outline-info">
+                        <i class="fas fa-eye"></i> Voir
+                    </a>
+                    <a href="{{ path('admin_admin_parcours_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour à la liste
+                    </a>
+                </div>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">
+                                <i class="fas fa-edit"></i> Informations du Parcours
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            {{ form_start(form, {'attr': {'class': 'needs-validation', 'novalidate': true}}) }}
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="form-group mb-3">
+                                        {{ form_label(form.libelle, null, {'class': 'form-label required'}) }}
+                                        {{ form_widget(form.libelle, {'attr': {'class': 'form-control'}}) }}
+                                        {{ form_help(form.libelle) }}
+                                        <div class="invalid-feedback">
+                                            {{ form_errors(form.libelle) }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-3">
+                                        {{ form_label(form.ordre, null, {'class': 'form-label'}) }}
+                                        {{ form_widget(form.ordre, {'attr': {'class': 'form-control'}}) }}
+                                        {{ form_help(form.ordre) }}
+                                        <div class="invalid-feedback">
+                                            {{ form_errors(form.ordre) }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="form-group mb-3">
+                                {{ form_label(form.expositions, null, {'class': 'form-label'}) }}
+                                {{ form_widget(form.expositions, {'attr': {'class': 'form-control select2', 'data-placeholder': 'Sélectionner des expositions'}}) }}
+                                {{ form_help(form.expositions) }}
+                                <div class="invalid-feedback">
+                                    {{ form_errors(form.expositions) }}
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                {{ form_label(form.interactifs, null, {'class': 'form-label'}) }}
+                                {{ form_widget(form.interactifs, {'attr': {'class': 'form-control select2', 'data-placeholder': 'Sélectionner des interactifs'}}) }}
+                                {{ form_help(form.interactifs) }}
+                                <div class="invalid-feedback">
+                                    {{ form_errors(form.interactifs) }}
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="form-group mb-3">
+                                <div class="form-check">
+                                    {{ form_widget(form.is_tosync, {'attr': {'class': 'form-check-input'}}) }}
+                                    {{ form_label(form.is_tosync, null, {'class': 'form-check-label'}) }}
+                                </div>
+                                {{ form_help(form.is_tosync) }}
+                            </div>
+
+                            {{ form_rest(form) }}
+                        </div>
+                        <div class="card-footer">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <a href="{{ path('admin_admin_parcours_delete', {'id': resource.id}) }}" 
+                                       class="btn btn-outline-danger"
+                                       onclick="return confirm('Êtes-vous sûr de vouloir supprimer ce parcours ?')">
+                                        <i class="fas fa-trash"></i> Supprimer
+                                    </a>
+                                </div>
+                                <div>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
+                                        <i class="fas fa-times"></i> Annuler
+                                    </button>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save"></i> Sauvegarder
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {{ form_end(form) }}
+                    </div>
+                </div>
+                
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-info-circle"></i> Informations
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <dl class="row">
+                                <dt class="col-sm-4">ID:</dt>
+                                <dd class="col-sm-8"><small class="text-monospace">{{ resource.id }}</small></dd>
+                                
+                                <dt class="col-sm-4">Créé le:</dt>
+                                <dd class="col-sm-8">{{ resource.createdAt|date('d/m/Y H:i') }}</dd>
+                                
+                                <dt class="col-sm-4">Modifié le:</dt>
+                                <dd class="col-sm-8">{{ resource.updatedAt|date('d/m/Y H:i') }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-chart-bar"></i> Statistiques
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="border-end">
+                                        <div class="h4 text-primary">{{ resource.expositions|length }}</div>
+                                        <small class="text-muted">Expositions</small>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="h4 text-info">{{ resource.interactifs|length }}</div>
+                                    <small class="text-muted">Interactifs</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialisation Select2 pour les selects multiples
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('.select2').select2({
+                    theme: 'bootstrap4',
+                    width: '100%'
+                });
+            }
+
+            // Validation Bootstrap
+            const forms = document.querySelectorAll('.needs-validation');
+            Array.from(forms).forEach(form => {
+                form.addEventListener('submit', event => {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                });
+            });
+        });
+    </script>
+{% endblock %}

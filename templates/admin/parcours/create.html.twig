@@ -1,0 +1,180 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Créer un Parcours{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Breadcrumb -->
+            <nav aria-label="breadcrumb" class="mb-4">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="{{ path('admin_admin_parcours_index') }}">
+                            <i class="fas fa-route"></i> Parcours
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">
+                        Nouveau parcours
+                    </li>
+                </ol>
+            </nav>
+
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="fas fa-plus-circle"></i> Nouveau Parcours
+                    </h1>
+                    <p class="text-muted mb-0">
+                        Créez un nouveau parcours de visite
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ path('admin_admin_parcours_index') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour à la liste
+                    </a>
+                </div>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h4 class="card-title mb-0">
+                                <i class="fas fa-edit"></i> Informations du Parcours
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            {{ form_start(form, {'attr': {'class': 'needs-validation', 'novalidate': true}}) }}
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="form-group mb-3">
+                                        {{ form_label(form.libelle, null, {'class': 'form-label required'}) }}
+                                        {{ form_widget(form.libelle, {'attr': {'class': 'form-control'}}) }}
+                                        {{ form_help(form.libelle) }}
+                                        <div class="invalid-feedback">
+                                            {{ form_errors(form.libelle) }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group mb-3">
+                                        {{ form_label(form.ordre, null, {'class': 'form-label'}) }}
+                                        {{ form_widget(form.ordre, {'attr': {'class': 'form-control'}}) }}
+                                        {{ form_help(form.ordre) }}
+                                        <div class="invalid-feedback">
+                                            {{ form_errors(form.ordre) }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="form-group mb-3">
+                                {{ form_label(form.expositions, null, {'class': 'form-label'}) }}
+                                {{ form_widget(form.expositions, {'attr': {'class': 'form-control select2', 'data-placeholder': 'Sélectionner des expositions'}}) }}
+                                {{ form_help(form.expositions) }}
+                                <div class="invalid-feedback">
+                                    {{ form_errors(form.expositions) }}
+                                </div>
+                            </div>
+
+                            <div class="form-group mb-3">
+                                {{ form_label(form.interactifs, null, {'class': 'form-label'}) }}
+                                {{ form_widget(form.interactifs, {'attr': {'class': 'form-control select2', 'data-placeholder': 'Sélectionner des interactifs'}}) }}
+                                {{ form_help(form.interactifs) }}
+                                <div class="invalid-feedback">
+                                    {{ form_errors(form.interactifs) }}
+                                </div>
+                            </div>
+
+                            <hr>
+
+                            <div class="form-group mb-3">
+                                <div class="form-check">
+                                    {{ form_widget(form.is_tosync, {'attr': {'class': 'form-check-input'}}) }}
+                                    {{ form_label(form.is_tosync, null, {'class': 'form-check-label'}) }}
+                                </div>
+                                {{ form_help(form.is_tosync) }}
+                            </div>
+
+                            {{ form_rest(form) }}
+                        </div>
+                        <div class="card-footer">
+                            <div class="d-flex justify-content-between">
+                                <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
+                                    <i class="fas fa-times"></i> Annuler
+                                </button>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Créer le Parcours
+                                </button>
+                            </div>
+                        </div>
+                        {{ form_end(form) }}
+                    </div>
+                </div>
+                
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-info-circle"></i> Aide
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-lightbulb"></i> Conseils</h6>
+                                <ul class="mb-0 small">
+                                    <li>Le <strong>libellé</strong> doit être unique et descriptif</li>
+                                    <li>L'<strong>ordre</strong> détermine la position dans les listes</li>
+                                    <li>Associez au moins une <strong>exposition</strong> pour la visibilité</li>
+                                    <li>Sélectionnez les <strong>interactifs</strong> selon l'expérience souhaitée</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="alert alert-warning">
+                                <h6><i class="fas fa-exclamation-triangle"></i> Synchronisation</h6>
+                                <p class="mb-0 small">
+                                    Le flag "À synchroniser" maintient la compatibilité avec Navinum V1. 
+                                    Laissez coché pour les nouveaux parcours.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialisation Select2 pour les selects multiples
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('.select2').select2({
+                    theme: 'bootstrap4',
+                    width: '100%'
+                });
+            }
+
+            // Validation Bootstrap
+            const forms = document.querySelectorAll('.needs-validation');
+            Array.from(forms).forEach(form => {
+                form.addEventListener('submit', event => {
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                    form.classList.add('was-validated');
+                });
+            });
+        });
+    </script>
+{% endblock %}

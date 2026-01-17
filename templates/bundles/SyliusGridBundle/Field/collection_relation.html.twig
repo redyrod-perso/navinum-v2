@@ -1,0 +1,9 @@
+{% if data is not empty %}
+    {% set items = [] %}
+    {% for item in data %}
+        {% set items = items|merge([attribute(item, options.vars.property)]) %}
+    {% endfor %}
+    {{ items|join(options.vars.separator|default(', ')) }}
+{% else %}
+    <span class="text-muted">-</span>
+{% endif %}

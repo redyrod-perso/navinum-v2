@@ -1,0 +1,15 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Expositions{% endblock %}
+
+{% block body %}
+  <h1>Expositions</h1>
+  <ul>
+    {% for expo in expositions %}
+      <li>{{ expo.libelle ?? '—' }} · {{ expo.createdAt|date('Y-m-d H:i') }}</li>
+    {% else %}
+      <li>Aucune exposition</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
+

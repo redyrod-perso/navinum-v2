@@ -1,0 +1,18 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block content %}
+  <div class="ui container">
+    <h2 class="ui header">{{ title }}</h2>
+    {{ form_start(form, {attr: {class: 'ui form'}}) }}
+      {{ form_row(form.adresse_mac) }}
+      {{ form_row(form.adresse_ip) }}
+      {{ form_row(form.serial_number) }}
+      {{ form_row(form.flotte) }}
+      {{ form_row(form.interactif) }}
+      {{ form_row(form.isTosync) }}
+      <button class="ui primary button" type="submit">Enregistrer</button>
+      <a class="ui button" href="{{ path('admin_peripherique_index') }}">Annuler</a>
+    {{ form_end(form) }}
+  </div>
+{% endblock %}
+

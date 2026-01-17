@@ -1,5 +1,8 @@
 twig:
     file_name_pattern: '*.twig'
+    paths:
+        '%kernel.project_dir%/templates/bundles/SyliusGridBundle': SyliusGrid
+        '%kernel.project_dir%/templates/admin': SyliusAdmin
 
 when@test:
     twig:

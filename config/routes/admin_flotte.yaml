@@ -1,0 +1,24 @@
+admin_flotte_index:
+    path: /admin/flottes
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_flotte
+    methods: [GET]
+admin_flotte_index_trailing:
+    path: /admin/flottes/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_flotte
+    methods: [GET]
+admin_flotte_new:
+    path: /admin/flottes/new
+    controller: App\Controller\Admin\FlotteAdminController::new
+    methods: [GET, POST]
+admin_flotte_edit:
+    path: /admin/flottes/{id}/edit
+    controller: App\Controller\Admin\FlotteAdminController::edit
+    methods: [GET, POST]
+admin_flotte_delete:
+    path: /admin/flottes/{id}
+    controller: App\Controller\Admin\FlotteAdminController::delete
+    methods: [POST]

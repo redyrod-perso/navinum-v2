@@ -1,0 +1,10 @@
+Quelle est la formule chimique de l'eau ?|H2O|CO2|O2|H2O2|0
+Combien de planètes y a-t-il dans notre système solaire ?|7|8|9|10|1
+Quelle est la vitesse de la lumière ?|300 000 km/s|150 000 km/s|450 000 km/s|600 000 km/s|0
+Quel élément chimique a pour symbole Fe ?|Fluor|Fer|Francium|Fermium|1
+Quelle est la température d'ébullition de l'eau au niveau de la mer ?|90°C|95°C|100°C|105°C|2
+Combien d'os possède un adulte humain ?|186|206|226|246|1
+Quelle planète est la plus proche du Soleil ?|Vénus|Mercure|Mars|Terre|1
+Qui a développé la théorie de la relativité ?|Isaac Newton|Albert Einstein|Galileo Galilei|Stephen Hawking|1
+Quel gaz les plantes absorbent-elles lors de la photosynthèse ?|Oxygène|Azote|Dioxyde de carbone|Hydrogène|2
+Quelle est la durée d'une année-lumière ?|Distance que la lumière parcourt en 1 an|Temps que met la lumière pour faire le tour de la Terre|365 jours|1000 ans|0

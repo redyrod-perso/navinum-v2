@@ -1,0 +1,110 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block content %}
+  <div class="ui container">
+    <div class="ui clearing segment">
+      <h2 class="ui left floated header">{{ parcours.libelle }}</h2>
+      <div class="ui right floated buttons">
+        <a class="ui button" href="{{ path('admin_parcours_edit', {id: parcours.id}) }}">
+          <i class="edit icon"></i> Modifier
+        </a>
+        <a class="ui button" href="{{ path('admin_parcours_index') }}">
+          <i class="list icon"></i> Retour à la liste
+        </a>
+      </div>
+    </div>
+
+    <div class="ui two column stackable grid">
+      <div class="column">
+        <h3 class="ui header">Informations Générales</h3>
+        <table class="ui definition table">
+          <tbody>
+            <tr>
+              <td>Libellé</td>
+              <td>{{ parcours.libelle }}</td>
+            </tr>
+            <tr>
+              <td>Ordre</td>
+              <td>{{ parcours.ordre ?? 'Non défini' }}</td>
+            </tr>
+            <tr>
+              <td>À synchroniser</td>
+              <td>
+                {% if parcours.isTosync %}
+                  <i class="green check icon"></i> Oui
+                {% else %}
+                  <i class="red times icon"></i> Non
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td>Créé le</td>
+              <td>{{ parcours.createdAt|date('d/m/Y à H:i') }}</td>
+            </tr>
+            <tr>
+              <td>Modifié le</td>
+              <td>{{ parcours.updatedAt|date('d/m/Y à H:i') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="column">
+        <h3 class="ui header">Relations</h3>
+
+        <h4 class="ui header">
+          <i class="image icon"></i>
+          <div class="content">
+            Expositions
+            <div class="sub header">{{ parcours.expositions|length }} exposition(s)</div>
+          </div>
+        </h4>
+        {% if parcours.expositions is not empty %}
+          <div class="ui list">
+            {% for exposition in parcours.expositions %}
+              <div class="item">
+                <i class="image icon"></i>
+                <div class="content">{{ exposition.libelle }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="ui grey text">Aucune exposition associée</p>
+        {% endif %}
+
+        <div class="ui divider"></div>
+
+        <h4 class="ui header">
+          <i class="tv icon"></i>
+          <div class="content">
+            Interactifs
+            <div class="sub header">{{ parcours.interactifs|length }} interactif(s)</div>
+          </div>
+        </h4>
+        {% if parcours.interactifs is not empty %}
+          <div class="ui list">
+            {% for interactif in parcours.interactifs %}
+              <div class="item">
+                <i class="tv icon"></i>
+                <div class="content">{{ interactif.libelle }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="ui grey text">Aucun interactif associé</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="ui segment">
+      <h3 class="ui header">Actions</h3>
+      <form method="post" action="{{ path('admin_parcours_delete', {id: parcours.id}) }}" style="display: inline;"
+            onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce parcours ?');">
+        <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ parcours.id) }}">
+        <button type="submit" class="ui red button">
+          <i class="trash icon"></i> Supprimer
+        </button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

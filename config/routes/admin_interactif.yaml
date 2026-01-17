@@ -1,0 +1,27 @@
+admin_interactif_index:
+    path: /admin/interactifs
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_interactif
+    methods: [GET]
+admin_interactif_index_trailing:
+    path: /admin/interactifs/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_interactif
+    methods: [GET]
+
+admin_interactif_new:
+    path: /admin/interactifs/new
+    controller: App\Controller\Admin\InteractifAdminController::new
+    methods: [GET, POST]
+
+admin_interactif_edit:
+    path: /admin/interactifs/{id}/edit
+    controller: App\Controller\Admin\InteractifAdminController::edit
+    methods: [GET, POST]
+
+admin_interactif_delete:
+    path: /admin/interactifs/{id}
+    controller: App\Controller\Admin\InteractifAdminController::delete
+    methods: [POST]

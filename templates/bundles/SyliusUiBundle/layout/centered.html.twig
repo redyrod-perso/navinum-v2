@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+    <title>{% block title %}Navinum Admin{% endblock %}</title>
+
+    <meta content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" name="viewport">
+
+    {% block metatags %}
+    {% endblock %}
+
+    {% block stylesheets %}
+        {# Semantic UI CSS #}
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
+
+        <style>
+            body.centered {
+                background-color: #f5f5f5;
+                padding: 0;
+                margin: 0;
+            }
+            .ui.container {
+                margin-top: 2em;
+                margin-bottom: 2em;
+            }
+            /* Menu de navigation */
+            .ui.inverted.menu {
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            /* Boutons d'action */
+            .ui.small.basic.icon.buttons .button {
+                padding: 0.6em;
+            }
+            /* Amélioration du modal */
+            .ui.modal .header {
+                background-color: #f8f8f9;
+            }
+            /* Hover sur les lignes du tableau */
+            .ui.table tbody tr:hover {
+                background-color: rgba(0,0,0,0.02) !important;
+            }
+            /* Style des boutons */
+            .ui.primary.button {
+                background-color: #2185d0;
+            }
+            .ui.primary.button:hover {
+                background-color: #1678c2;
+            }
+        </style>
+
+        <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+        <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+        <![endif]-->
+    {% endblock %}
+</head>
+<body class="centered">
+{% block pre_content %}
+{% endblock %}
+
+{% block content %}
+{% endblock %}
+
+{% block post_content %}
+{% endblock %}
+
+{% block javascripts %}
+    {# jQuery (required by Semantic UI) #}
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    {# Semantic UI JS #}
+    <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.js"></script>
+{% endblock %}
+</body>
+</html>

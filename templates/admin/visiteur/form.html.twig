@@ -1,0 +1,21 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block content %}
+  <div class="ui container">
+    <h2 class="ui header">{{ title }}</h2>
+    {{ form_start(form, {attr: {class: 'ui form'}}) }}
+      {{ form_row(form.email) }}
+      <div class="two fields">
+        <div class="field">{{ form_row(form.prenom) }}</div>
+        <div class="field">{{ form_row(form.nom) }}</div>
+      </div>
+      {{ form_row(form.langue) }}
+      {{ form_row(form.csp) }}
+      {{ form_row(form.date_naissance) }}
+      {{ form_row(form.is_active) }}
+      <button class="ui primary button" type="submit">Enregistrer</button>
+      <a class="ui button" href="{{ path('admin_visiteur_index') }}">Annuler</a>
+    {{ form_end(form) }}
+  </div>
+{% endblock %}
+

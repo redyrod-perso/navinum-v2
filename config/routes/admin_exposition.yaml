@@ -1,0 +1,27 @@
+admin_exposition_index:
+    path: /admin/expositions
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_exposition
+    methods: [GET]
+admin_exposition_index_trailing:
+    path: /admin/expositions/
+    controller: App\Controller\Admin\GridController::index
+    defaults:
+        grid: app_admin_exposition
+    methods: [GET]
+
+admin_exposition_new:
+    path: /admin/expositions/new
+    controller: App\Controller\Admin\ExpositionAdminController::new
+    methods: [GET, POST]
+
+admin_exposition_edit:
+    path: /admin/expositions/{id}/edit
+    controller: App\Controller\Admin\ExpositionAdminController::edit
+    methods: [GET, POST]
+
+admin_exposition_delete:
+    path: /admin/expositions/{id}
+    controller: App\Controller\Admin\ExpositionAdminController::delete
+    methods: [POST]

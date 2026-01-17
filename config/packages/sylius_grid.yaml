@@ -1,0 +1,325 @@
+sylius_grid:
+    drivers: ['doctrine/orm']
+    grids:
+        app_admin_exposition:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Exposition
+            fields:
+                libelle:
+                    type: string
+                    label: Libellé
+                contexte:
+                    type: twig
+                    label: Contexte
+                    path: contexte
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                organisateurEditeur:
+                    type: twig
+                    label: Éditeur
+                    path: organisateurEditeur
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                organisateurDiffuseur:
+                    type: twig
+                    label: Diffuseur
+                    path: organisateurDiffuseur
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                start_at:
+                    type: datetime
+                    label: Commence le
+                    options:
+                        format: 'd/m/Y'
+                end_at:
+                    type: datetime
+                    label: Fini le
+                    options:
+                        format: 'd/m/Y'
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    options:
+                        format: 'd/m/Y H:i'
+                updatedAt:
+                    type: datetime
+                    label: Mis à jour le
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                libelle: asc
+            filters:
+                libelle:
+                    type: string
+        app_admin_interactif:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Interactif
+            fields:
+                libelle:
+                    type: string
+                    label: Libellé
+                categorie:
+                    type: string
+                    label: Catégorie
+                source_type:
+                    type: string
+                    label: Source
+                markets:
+                    type: string
+                    label: Markets
+                ordre:
+                    type: string
+                    label: Ordre
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    options:
+                        format: 'd/m/Y H:i'
+                updatedAt:
+                    type: datetime
+                    label: Mis à jour le
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                libelle: asc
+            filters:
+                libelle:
+                    type: string
+                source_type:
+                    type: string
+                categorie:
+                    type: string
+        app_admin_visiteur:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Visiteur
+            fields:
+                nom:
+                    type: string
+                    label: Nom
+                prenom:
+                    type: string
+                    label: Prénom
+                pseudo_son:
+                    type: string
+                    label: Pseudo
+                password_son:
+                    type: string
+                    label: Password son
+                date_naissance:
+                    type: datetime
+                    label: Date naissance
+                    options:
+                        format: 'd/m/Y'
+                code_postal:
+                    type: string
+                    label: Code postal
+                ville:
+                    type: string
+                    label: Ville
+                type:
+                    type: string
+                    label: Type
+                email:
+                    type: string
+                    label: Email
+                genre:
+                    type: string
+                    label: Genre
+                csp:
+                    type: twig
+                    label: CSP
+                    path: csp
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                is_active:
+                    type: twig
+                    label: Actif
+                    options:
+                        template: '@SyliusUi/Grid/Field/enabled.html.twig'
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    options:
+                        format: 'd/m/Y H:i'
+                updatedAt:
+                    type: datetime
+                    label: Mis à jour le
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                nom: asc
+            filters:
+                email:
+                    type: string
+                nom:
+                    type: string
+        app_admin_rfid:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Rfid
+            fields:
+                valeur1:
+                    type: string
+                    label: UID
+                groupe:
+                    type: twig
+                    label: Nom Groupe
+                    path: groupe
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: nom
+                type:
+                    type: string
+                    label: Type
+                isResettable:
+                    type: twig
+                    label: À resetter
+                    options:
+                        template: '@SyliusUi/Grid/Field/enabled.html.twig'
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                createdAt: desc
+            filters:
+                type:
+                    type: string
+        app_admin_flotte:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Flotte
+            fields:
+                libelle:
+                    type: string
+                    label: Libellé
+                exposition:
+                    type: twig
+                    label: Exposition
+                    path: exposition
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                libelle: asc
+            filters:
+                libelle:
+                    type: string
+        app_admin_peripherique:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Peripherique
+            fields:
+                adresse_mac:
+                    type: string
+                    label: Adresse MAC
+                adresse_ip:
+                    type: string
+                    label: IP
+                flotte:
+                    type: twig
+                    label: Flotte
+                    path: flotte
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                interactif:
+                    type: twig
+                    label: Interactif
+                    path: interactif
+                    options:
+                        template: '@SyliusGrid/Field/relation.html.twig'
+                        vars:
+                            property: libelle
+                serial_number:
+                    type: string
+                    label: N° série
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                adresse_mac: asc
+            filters:
+                adresse_mac:
+                    type: string
+        app_admin_parcours:
+            driver:
+                name: doctrine/orm
+                options:
+                    class: App\Entity\Parcours
+                    repository:
+                        method: createParcoursGridQueryBuilder
+            fields:
+                libelle:
+                    type: string
+                    label: Libellé
+                    sortable: true
+                ordre:
+                    type: string
+                    label: Ordre
+                    sortable: true
+                expositions:
+                    type: twig
+                    label: Expositions
+                    options:
+                        template: '@SyliusGrid/Field/collection_relation.html.twig'
+                        vars:
+                            property: libelle
+                            separator: ', '
+                interactifs:
+                    type: twig
+                    label: Interactifs
+                    options:
+                        template: '@SyliusGrid/Field/collection_relation.html.twig'
+                        vars:
+                            property: libelle
+                            separator: ', '
+                is_tosync:
+                    type: twig
+                    label: À synchroniser
+                    options:
+                        template: '@SyliusUi/Grid/Field/enabled.html.twig'
+                createdAt:
+                    type: datetime
+                    label: Créé le
+                    sortable: true
+                    options:
+                        format: 'd/m/Y H:i'
+            sorting:
+                ordre: asc
+                libelle: asc
+            filters:
+                libelle:
+                    type: string
+                    label: Rechercher par nom
+                is_tosync:
+                    type: boolean
+                    label: À synchroniser

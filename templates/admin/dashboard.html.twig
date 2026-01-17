@@ -1,0 +1,12 @@
+{% extends '@SyliusUi/layout/centered.html.twig' %}
+
+{% block content %}
+  <div class="ui container">
+    <h1 class="ui header">Navinum Admin</h1>
+    <div class="ui list">
+      <a class="item" href="{{ path('admin_exposition_index') }}">Expositions</a>
+      <a class="item" href="{{ path('admin_interactif_index') }}">Interactifs</a>
+      <a class="item" href="{{ path('admin_admin_parcours_index') }}">Parcours</a>
+    </div>
+  </div>
+{% endblock %}

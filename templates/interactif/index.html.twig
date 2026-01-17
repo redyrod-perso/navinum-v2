@@ -1,0 +1,15 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Interactifs{% endblock %}
+
+{% block body %}
+  <h1>Interactifs</h1>
+  <ul>
+    {% for it in interactifs %}
+      <li>{{ it.libelle ?? '—' }} · {{ it.createdAt|date('Y-m-d H:i') }}</li>
+    {% else %}
+      <li>Aucun interactif</li>
+    {% endfor %}
+  </ul>
+{% endblock %}
+

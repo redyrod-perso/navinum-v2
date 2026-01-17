@@ -1,0 +1,10 @@
+Quelle est la capitale de l'Italie ?|Milan|Rome|Venise|Naples|1
+Quel est le plus long fleuve du monde ?|Amazone|Nil|Yangtsé|Mississippi|1
+Combien y a-t-il de continents sur Terre ?|5|6|7|8|2
+Quelle est la plus haute montagne du monde ?|K2|Mont Blanc|Everest|Kilimandjaro|2
+Quel océan borde la côte ouest de la France ?|Océan Indien|Océan Pacifique|Océan Atlantique|Mer Méditerranée|2
+Quelle est la capitale du Japon ?|Kyoto|Osaka|Tokyo|Hiroshima|2
+Quel pays a la plus grande superficie ?|Canada|Chine|États-Unis|Russie|3
+Dans quel pays se trouve la tour Eiffel ?|Belgique|Suisse|France|Allemagne|2
+Quel désert est le plus grand du monde ?|Sahara|Gobi|Atacama|Antarctique|0
+Quelle est la capitale de l'Espagne ?|Barcelone|Séville|Valence|Madrid|3
