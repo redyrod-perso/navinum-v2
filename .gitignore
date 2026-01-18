@@ -2,11 +2,12 @@
 /.vscode
 /.specify
 /.claude
-
+/.idea
 
 ###> symfony/framework-bundle ###
 /.env.local
-/.env.local.php
+/.env.prod
+/.env.*.prod
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
 /public/bundles/
@@ -30,3 +31,4 @@
 npm-debug.log
 yarn-error.log
 ###< symfony/webpack-encore-bundle ###
+

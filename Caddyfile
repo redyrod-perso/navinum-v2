@@ -1,0 +1,16 @@
+{
+    auto_https off
+}
+
+:80 {
+    root * /app/public
+    php_fastcgi unix//run/php/php.sock
+    file_server
+
+    mercure {
+        transport_url http://mercure:3000/.well-known/mercure
+        publisher_jwt "SUPER_SECRET_PUBLISHER"
+        subscriber_jwt "SUPER_SECRET_SUBSCRIBER"
+        anonymous
+    }
+}
