@@ -4,6 +4,8 @@ namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
 use App\Repository\VisiteurRepository;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity(repositoryClass: VisiteurRepository::class)]
@@ -20,6 +22,7 @@ class Visiteur
     public function __construct()
     {
         $this->initializeEntity();
+        $this->preferenceMedias = new ArrayCollection();
     }
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $password_son = null;
@@ -102,6 +105,12 @@ class Visiteur
     #[ORM\Column(type: 'boolean', options: ['default' => 1])]
     private bool $is_tosync = true;
 
+    #[ORM\ManyToMany(targetEntity: PreferenceMedia::class, inversedBy: 'visiteurs')]
+    #[ORM\JoinTable(name: 'preferencemedia_visiteur')]
+    #[ORM\JoinColumn(name: 'visiteur_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
+    #[ORM\InverseJoinColumn(name: 'preference_media_id', referencedColumnName: 'id', onDelete: 'CASCADE')]
+    private Collection $preferenceMedias;
+
     public function getPasswordSon(): ?string { return $this->password_son; }
     public function setPasswordSon(?string $p): self { $this->password_son = $p; return $this; }
 
@@ -179,4 +188,27 @@ class Visiteur
 
     public function isTosync(): bool { return $this->is_tosync; }
     public function setIsTosync(bool $b): self { $this->is_tosync = $b; return $this; }
+
+    /**
+     * @return Collection<int, PreferenceMedia>
+     */
+    public function getPreferenceMedias(): Collection
+    {
+        return $this->preferenceMedias;
+    }
+
+    public function addPreferenceMedia(PreferenceMedia $preferenceMedia): self
+    {
+        if (!$this->preferenceMedias->contains($preferenceMedia)) {
+            $this->preferenceMedias->add($preferenceMedia);
+        }
+
+        return $this;
+    }
+
+    public function removePreferenceMedia(PreferenceMedia $preferenceMedia): self
+    {
+        $this->preferenceMedias->removeElement($preferenceMedia);
+        return $this;
+    }
 }

@@ -13,6 +13,7 @@ function QuizApp() {
     const [themes, setThemes] = useState([]);
     const [selectedTheme, setSelectedTheme] = useState(null);
     const [playerName, setPlayerName] = useState('');
+    const [groupName, setGroupName] = useState('');
     const [sessionId, setSessionId] = useState('');
     const [players, setPlayers] = useState([]);
     const [questions, setQuestions] = useState([]);
@@ -31,41 +32,57 @@ function QuizApp() {
             .catch(err => console.error('Erreur chargement thèmes:', err));
     }, []);
 
-    // Polling pour recevoir les mises à jour
+    // SSE pour recevoir les mises à jour en temps réel
     useEffect(() => {
         if (sessionId && (stage === 'lobby' || stage === 'playing')) {
-            const pollInterval = setInterval(async () => {
-                try {
-                    const data = await api.sessions.get(sessionId);
-                    const session = data.session;
+            let eventSource = null;
 
-                    if (session) {
-                        // Mise à jour de la liste des joueurs
-                        if (JSON.stringify(players) !== JSON.stringify(session.players)) {
-                            setPlayers(session.players);
-                        }
+            try {
+                eventSource = new EventSource(`/api/session/${sessionId}/stream`);
 
-                        // Vérifier si le quiz a démarré
-                        if (stage === 'lobby' && session.status === 'playing' && session.theme) {
-                            loadQuestionsAndStart(session.theme);
-                        }
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
 
-                        // Mise à jour des scores
-                        if (stage === 'playing' && session.players) {
-                            const newScores = {};
-                            session.players.forEach(player => {
-                                newScores[player.name] = player.score;
-                            });
-                            setScores(newScores);
+                        if (data.type === 'session' && data.session) {
+                            const session = data.session;
+
+                            // Mise à jour de la liste des joueurs
+                            if (JSON.stringify(players) !== JSON.stringify(session.players)) {
+                                setPlayers(session.players);
+                            }
+
+                            // Vérifier si le quiz a démarré
+                            if (stage === 'lobby' && session.status === 'playing' && session.theme) {
+                                loadQuestionsAndStart(session.theme);
+                            }
+
+                            // Mise à jour des scores
+                            if (stage === 'playing' && session.players) {
+                                const newScores = {};
+                                session.players.forEach(player => {
+                                    newScores[player.name] = player.score;
+                                });
+                                setScores(newScores);
+                            }
                         }
+                    } catch (err) {
+                        console.error('Erreur parsing SSE:', err);
                     }
-                } catch (err) {
-                    console.error('Erreur polling:', err);
-                }
-            }, 1000); // Poll every second
+                };
+
+                eventSource.onerror = (err) => {
+                    console.error('Erreur SSE:', err);
+                    eventSource.close();
+                };
+            } catch (err) {
+                console.error('Erreur création EventSource:', err);
+            }
 
             return () => {
-                clearInterval(pollInterval);
+                if (eventSource) {
+                    eventSource.close();
+                }
             };
         }
     }, [sessionId, stage, playerName, players]);
@@ -113,20 +130,58 @@ function QuizApp() {
             return;
         }
 
-        const globalSessionId = 'global';
+        if (!groupName.trim()) {
+            alert('Veuillez entrer le nom du groupe');
+            return;
+        }
 
         try {
-            let data;
+            // Normaliser le nom du groupe pour l'utiliser comme sessionId
+            const normalizedGroupName = groupName.trim();
 
-            // D'abord essayer de rejoindre la session globale
+            // 1. Vérifier si le groupe RFID existe ou le créer
             try {
-                data = await api.sessions.join(globalSessionId, { playerName: playerName });
+                // Chercher le groupe par nom via l'API
+                const response = await fetch(`/api/rfid_groupes?nom=${encodeURIComponent(normalizedGroupName)}`);
+                const groupsData = await response.json();
+
+                if (!groupsData.member || groupsData.member.length === 0) {
+                    // Le groupe n'existe pas, le créer
+                    const createResponse = await fetch('/api/rfid_groupes', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/ld+json',
+                        },
+                        body: JSON.stringify({
+                            nom: normalizedGroupName
+                        })
+                    });
+
+                    if (!createResponse.ok) {
+                        throw new Error('Impossible de créer le groupe');
+                    }
+
+                    console.log('Groupe RFID créé:', normalizedGroupName);
+                } else {
+                    console.log('Groupe RFID trouvé:', groupsData.member[0]);
+                }
+            } catch (err) {
+                console.error('Erreur gestion groupe RFID:', err);
+                alert('Erreur lors de la gestion du groupe: ' + err.message);
+                return;
+            }
+
+            // 2. Rejoindre ou créer la session avec le nom du groupe comme ID
+            let data;
+            try {
+                data = await api.sessions.join(normalizedGroupName, { playerName: playerName });
             } catch (err) {
                 // Si la session n'existe pas encore, la créer
                 if (err instanceof NotFoundError) {
                     data = await api.sessions.create({
                         playerName: playerName,
-                        sessionId: globalSessionId
+                        sessionId: normalizedGroupName,
+                        rfidGroupeName: normalizedGroupName
                     });
                 } else {
                     throw err;
@@ -139,11 +194,11 @@ function QuizApp() {
                 return;
             }
 
-            setSessionId(globalSessionId);
+            setSessionId(normalizedGroupName);
             setPlayers(data.session.players);
             setStage('lobby');
         } catch (err) {
-            console.error('Erreur jonction session globale:', err);
+            console.error('Erreur jonction session:', err);
             alert('Erreur de connexion au serveur: ' + err.message);
         }
     };
@@ -218,6 +273,7 @@ function QuizApp() {
         setStage('home');
         setSelectedTheme(null);
         setPlayerName('');
+        setGroupName('');
         setSessionId('');
         setPlayers([]);
         setQuestions([]);
@@ -246,6 +302,18 @@ function QuizApp() {
                         value={playerName}
                         onChange={(e) => setPlayerName(e.target.value)}
                         placeholder="Entrez votre nom"
+                        onKeyPress={(e) => e.key === 'Enter' && document.getElementById('groupNameInput').focus()}
+                    />
+                </div>
+
+                <div className="input-group">
+                    <label>Nom du groupe :</label>
+                    <input
+                        id="groupNameInput"
+                        type="text"
+                        value={groupName}
+                        onChange={(e) => setGroupName(e.target.value)}
+                        placeholder="Entrez le nom de votre groupe"
                         onKeyPress={(e) => e.key === 'Enter' && joinGlobalSession()}
                     />
                 </div>
@@ -265,6 +333,18 @@ function QuizApp() {
                     <button className="disconnect-button" onClick={disconnect}>
                         Se déconnecter
                     </button>
+                </div>
+
+                <div style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    padding: '15px 20px',
+                    borderRadius: '10px',
+                    marginBottom: '20px',
+                    textAlign: 'center',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                }}>
+                    <strong>🏠 Groupe :</strong> {groupName || sessionId}
                 </div>
 
                 <div className="lobby-players">

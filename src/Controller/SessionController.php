@@ -5,11 +5,13 @@ namespace App\Controller;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\Routing\Annotation\Route;
 
 class SessionController extends AbstractController
 {
     private const SESSIONS_DIR = '/var/cache/sessions';
+    private const UPDATES_DIR = '/var/cache/session_updates';
 
     private function getSessionsPath(): string
     {
@@ -31,8 +33,24 @@ class SessionController extends AbstractController
 
     private function saveSession(string $sessionId, array $session): void
     {
+        $session['lastUpdate'] = time();
         $file = $this->getSessionsPath() . '/' . $sessionId . '.json';
         file_put_contents($file, json_encode($session));
+    }
+
+    private function getUpdatesPath(): string
+    {
+        $path = $this->getParameter('kernel.project_dir') . self::UPDATES_DIR;
+        if (!is_dir($path)) {
+            mkdir($path, 0777, true);
+        }
+        return $path;
+    }
+
+    private function notifySessionUpdate(string $sessionId): void
+    {
+        $updateFile = $this->getUpdatesPath() . '/' . $sessionId . '.update';
+        file_put_contents($updateFile, time());
     }
 
     #[Route('/api/session/create', name: 'api_session_create', methods: ['POST'])]
@@ -41,6 +59,7 @@ class SessionController extends AbstractController
         $data = json_decode($request->getContent(), true);
         $playerName = $data['playerName'] ?? null;
         $customSessionId = $data['sessionId'] ?? null;
+        $rfidGroupeName = $data['rfidGroupeName'] ?? null;
 
         if (!$playerName) {
             return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
@@ -70,6 +89,7 @@ class SessionController extends AbstractController
                         'joinedAt' => time()
                     ];
                     $this->saveSession($sessionId, $existingSession);
+                    $this->notifySessionUpdate($sessionId);
                 }
 
                 return new JsonResponse([
@@ -82,7 +102,8 @@ class SessionController extends AbstractController
         // Créer une nouvelle session
         $session = [
             'id' => $sessionId,
-            'status' => 'lobby', // lobby, playing, finished
+            'rfidGroupeName' => $rfidGroupeName,
+            'status' => 'lobby',
             'theme' => null,
             'players' => [
                 [
@@ -91,10 +112,12 @@ class SessionController extends AbstractController
                     'joinedAt' => time()
                 ]
             ],
-            'createdAt' => time()
+            'createdAt' => time(),
+            'lastUpdate' => time()
         ];
 
         $this->saveSession($sessionId, $session);
+        $this->notifySessionUpdate($sessionId);
 
         return new JsonResponse([
             'sessionId' => $sessionId,
@@ -138,6 +161,7 @@ class SessionController extends AbstractController
                 'joinedAt' => time()
             ];
             $this->saveSession($sessionId, $session);
+            $this->notifySessionUpdate($sessionId);
         }
 
         return new JsonResponse(['session' => $session]);
@@ -175,6 +199,7 @@ class SessionController extends AbstractController
         }));
 
         $this->saveSession($sessionId, $session);
+        $this->notifySessionUpdate($sessionId);
 
         return new JsonResponse(['status' => 'ok', 'session' => $session]);
     }
@@ -236,6 +261,7 @@ class SessionController extends AbstractController
         $session['theme'] = $theme;
         $session['startedAt'] = time();
         $this->saveSession($sessionId, $session);
+        $this->notifySessionUpdate($sessionId);
 
         return new JsonResponse(['status' => 'ok', 'session' => $session]);
     }
@@ -264,7 +290,66 @@ class SessionController extends AbstractController
             }
         }
         $this->saveSession($sessionId, $session);
+        $this->notifySessionUpdate($sessionId);
 
         return new JsonResponse(['status' => 'ok', 'session' => $session]);
+    }
+
+    #[Route('/api/session/{sessionId}/stream', name: 'api_session_stream', methods: ['GET'])]
+    public function streamSession(string $sessionId): StreamedResponse
+    {
+        $response = new StreamedResponse();
+        $response->headers->set('Content-Type', 'text/event-stream');
+        $response->headers->set('Cache-Control', 'no-cache');
+        $response->headers->set('X-Accel-Buffering', 'no');
+
+        $response->setCallback(function() use ($sessionId) {
+            $lastUpdateTime = 0;
+            $updateFile = $this->getUpdatesPath() . '/' . $sessionId . '.update';
+
+            // Envoyer la session initiale
+            $session = $this->getSession($sessionId);
+            if ($session) {
+                echo "data: " . json_encode(['type' => 'session', 'session' => $session]) . "\n\n";
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+                $lastUpdateTime = $session['lastUpdate'] ?? 0;
+            }
+
+            // Boucle de polling pour détecter les changements
+            $timeout = 300; // 5 minutes timeout
+            $startTime = time();
+
+            while (time() - $startTime < $timeout) {
+                if (file_exists($updateFile)) {
+                    $updateTime = (int) file_get_contents($updateFile);
+
+                    if ($updateTime > $lastUpdateTime) {
+                        $session = $this->getSession($sessionId);
+                        if ($session) {
+                            echo "data: " . json_encode(['type' => 'session', 'session' => $session]) . "\n\n";
+                            if (ob_get_level() > 0) {
+                                ob_flush();
+                            }
+                            flush();
+                            $lastUpdateTime = $updateTime;
+                        }
+                    }
+                }
+
+                // Heartbeat pour maintenir la connexion
+                echo ": heartbeat\n\n";
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+
+                sleep(1);
+            }
+        });
+
+        return $response;
     }
 }
