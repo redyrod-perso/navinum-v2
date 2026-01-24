@@ -6,13 +6,12 @@ use App\Repository\ParcoursRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
-use Sylius\Resource\Model\ResourceInterface;
 
 #[ORM\Entity(repositoryClass: ParcoursRepository::class)]
 #[ORM\HasLifecycleCallbacks]
 #[ORM\Table(name: 'parcours')]
 #[ORM\UniqueConstraint(name: 'uniq_parcours_libelle', columns: ['libelle'])]
-class Parcours implements ResourceInterface
+class Parcours
 {
     use EntityTrait;
 

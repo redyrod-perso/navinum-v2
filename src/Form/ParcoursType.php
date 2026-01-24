@@ -84,8 +84,7 @@ class ParcoursType extends AbstractType
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
-            'data_class' => Parcours::class,
-            'validation_groups' => ['sylius']
+            'data_class' => Parcours::class
         ]);
     }
 
