@@ -11,6 +11,13 @@ set -e
 #
 #echo "Running migrations..."
 #php bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+if [ "$APP_ENV" = "prod" ]; then
+  php /usr/local/bin/composer install --no-dev --optimize-autoloader;
+else
+  php /usr/local/bin/composer install --optimize-autoloader;
+fi
+
+composer dump-autoload --optimize
 
 echo "Clearing cache..."
 php bin/console cache:clear --no-interaction

@@ -1,7 +1,7 @@
 services:
   database:
     image: postgres:16-alpine
-    container_name: navinum_db
+    container_name: database
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,7 +17,7 @@ services:
 
   mercure:
     image: dunglas/mercure
-    container_name: navinum_mercure
+    container_name: mercure
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -31,7 +31,13 @@ services:
 
   app:
     image: dunglas/frankenphp:latest
-    container_name: navinum_app
+    build:
+        context: .
+        ssh:
+            - default
+        args:
+            APP_ENV: ${APP_ENV}
+    container_name: app
     restart: unless-stopped
     ports:
       - "80:80"
