@@ -86,7 +86,8 @@ class SessionController extends AbstractController
                     $existingSession['players'][] = [
                         'name' => $playerName,
                         'score' => 0,
-                        'joinedAt' => time()
+                        'joinedAt' => time(),
+                        'isLeader' => false
                     ];
                     $this->saveSession($sessionId, $existingSession);
                     $this->notifySessionUpdate($sessionId);
@@ -103,13 +104,15 @@ class SessionController extends AbstractController
         $session = [
             'id' => $sessionId,
             'rfidGroupeName' => $rfidGroupeName,
+            'leader' => $playerName, // Le créateur est le leader
             'status' => 'lobby',
             'theme' => null,
             'players' => [
                 [
                     'name' => $playerName,
                     'score' => 0,
-                    'joinedAt' => time()
+                    'joinedAt' => time(),
+                    'isLeader' => true
                 ]
             ],
             'createdAt' => time(),
@@ -158,7 +161,8 @@ class SessionController extends AbstractController
             $session['players'][] = [
                 'name' => $playerName,
                 'score' => 0,
-                'joinedAt' => time()
+                'joinedAt' => time(),
+                'isLeader' => false
             ];
             $this->saveSession($sessionId, $session);
             $this->notifySessionUpdate($sessionId);
@@ -242,9 +246,14 @@ class SessionController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $theme = $data['theme'] ?? null;
+        $playerName = $data['playerName'] ?? null;
 
         if (!$theme) {
             return new JsonResponse(['error' => 'Thème manquant'], 400);
+        }
+
+        if (!$playerName) {
+            return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
         }
 
         $session = $this->getSession($sessionId);
@@ -254,6 +263,13 @@ class SessionController extends AbstractController
 
         if ($session['status'] !== 'lobby') {
             return new JsonResponse(['error' => 'Le quiz a déjà commencé'], 400);
+        }
+
+        // Vérifier que le joueur est bien le leader
+        if (!isset($session['leader']) || $session['leader'] !== $playerName) {
+            return new JsonResponse([
+                'error' => 'Seul le leader du groupe peut démarrer le quiz'
+            ], 403);
         }
 
         // Démarrer le quiz

@@ -38,10 +38,15 @@ use Symfony\Component\Validator\Constraints as Assert;
             provider: RfidGroupeProvider::class
         ),
         new Post(
-            validationContext: ['groups' => ['Default', 'rfid_groupe:create']]
+            validationContext: ['groups' => ['Default', 'rfid_groupe:create']],
+            processor: \App\State\Processor\RfidGroupeProcessor::class
         ),
-        new Put(),
-        new Delete(),
+        new Put(
+            processor: \App\State\Processor\RfidGroupeProcessor::class
+        ),
+        new Delete(
+            processor: \App\State\Processor\RfidGroupeProcessor::class
+        ),
     ],
     denormalizationContext: ['groups' => ['rfid_groupe:write']],
     paginationEnabled: true,

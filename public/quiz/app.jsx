@@ -14,6 +14,8 @@ function QuizApp() {
     const [selectedTheme, setSelectedTheme] = useState(null);
     const [playerName, setPlayerName] = useState('');
     const [groupName, setGroupName] = useState('');
+    const [existingGroups, setExistingGroups] = useState([]);
+    const [groupMode, setGroupMode] = useState('select'); // 'select' ou 'create'
     const [sessionId, setSessionId] = useState('');
     const [players, setPlayers] = useState([]);
     const [questions, setQuestions] = useState([]);
@@ -31,6 +33,69 @@ function QuizApp() {
             .then(data => setThemes(data))
             .catch(err => console.error('Erreur chargement thèmes:', err));
     }, []);
+
+    // Fonction pour charger les groupes existants
+    const loadGroups = () => {
+        fetch('/api/rfid_groupes')
+            .then(res => res.json())
+            .then(data => {
+                if (data.member && Array.isArray(data.member)) {
+                    setExistingGroups(data.member);
+                }
+            })
+            .catch(err => console.error('Erreur chargement groupes:', err));
+    };
+
+    // Charger les groupes au montage et à chaque fois qu'on revient sur home
+    useEffect(() => {
+        if (stage === 'home') {
+            loadGroups();
+        }
+    }, [stage]);
+
+    // Écouter Mercure pour les nouveaux groupes créés (uniquement sur home)
+    useEffect(() => {
+        if (stage !== 'home') {
+            return;
+        }
+
+        let eventSource = null;
+
+        try {
+            // S'abonner au topic des groupes RFID
+            const mercureUrl = new URL('http://localhost:3000/.well-known/mercure');
+            mercureUrl.searchParams.append('topic', 'rfid-groupes');
+
+            eventSource = new EventSource(mercureUrl);
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'groupe_created') {
+                        console.log('Nouveau groupe créé:', data.groupe);
+                        // Rafraîchir la liste des groupes
+                        loadGroups();
+                    }
+                } catch (err) {
+                    console.error('Erreur parsing Mercure:', err);
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                console.error('Erreur Mercure:', err);
+                eventSource.close();
+            };
+        } catch (err) {
+            console.error('Erreur création EventSource Mercure:', err);
+        }
+
+        return () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+        };
+    }, [stage]);
 
     // SSE pour recevoir les mises à jour en temps réel
     useEffect(() => {
@@ -210,11 +275,18 @@ function QuizApp() {
         }
 
         try {
-            await api.sessions.start(sessionId, { theme: selectedTheme });
+            await api.sessions.start(sessionId, {
+                theme: selectedTheme,
+                playerName: playerName
+            });
             // Le quiz démarrera via le polling
         } catch (err) {
             console.error('Erreur démarrage quiz:', err);
-            alert(err.message || 'Impossible de démarrer le quiz');
+            if (err.message && err.message.includes('leader')) {
+                alert('Seul le leader du groupe peut démarrer le quiz');
+            } else {
+                alert(err.message || 'Impossible de démarrer le quiz');
+            }
         }
     };
 
@@ -302,20 +374,77 @@ function QuizApp() {
                         value={playerName}
                         onChange={(e) => setPlayerName(e.target.value)}
                         placeholder="Entrez votre nom"
-                        onKeyPress={(e) => e.key === 'Enter' && document.getElementById('groupNameInput').focus()}
+                        onKeyPress={(e) => e.key === 'Enter' && (groupMode === 'select' ? document.getElementById('groupSelect').focus() : document.getElementById('groupNameInput').focus())}
                     />
                 </div>
 
                 <div className="input-group">
-                    <label>Nom du groupe :</label>
-                    <input
-                        id="groupNameInput"
-                        type="text"
-                        value={groupName}
-                        onChange={(e) => setGroupName(e.target.value)}
-                        placeholder="Entrez le nom de votre groupe"
-                        onKeyPress={(e) => e.key === 'Enter' && joinGlobalSession()}
-                    />
+                    <label>Groupe :</label>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                        <button
+                            onClick={() => setGroupMode('select')}
+                            style={{
+                                flex: 1,
+                                padding: '10px',
+                                background: groupMode === 'select' ? '#667eea' : '#e0e0e0',
+                                color: groupMode === 'select' ? 'white' : '#333',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: groupMode === 'select' ? 'bold' : 'normal'
+                            }}
+                        >
+                            Sélectionner un groupe
+                        </button>
+                        <button
+                            onClick={() => setGroupMode('create')}
+                            style={{
+                                flex: 1,
+                                padding: '10px',
+                                background: groupMode === 'create' ? '#667eea' : '#e0e0e0',
+                                color: groupMode === 'create' ? 'white' : '#333',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontWeight: groupMode === 'create' ? 'bold' : 'normal'
+                            }}
+                        >
+                            Créer un groupe
+                        </button>
+                    </div>
+
+                    {groupMode === 'select' ? (
+                        <select
+                            id="groupSelect"
+                            value={groupName}
+                            onChange={(e) => setGroupName(e.target.value)}
+                            style={{
+                                width: '100%',
+                                padding: '12px',
+                                border: '2px solid #e0e0e0',
+                                borderRadius: '8px',
+                                fontSize: '1em',
+                                cursor: 'pointer'
+                            }}
+                            onKeyPress={(e) => e.key === 'Enter' && joinGlobalSession()}
+                        >
+                            <option value="">-- Choisir un groupe --</option>
+                            {existingGroups.map((group, index) => (
+                                <option key={index} value={group.nom}>
+                                    {group.nom}
+                                </option>
+                            ))}
+                        </select>
+                    ) : (
+                        <input
+                            id="groupNameInput"
+                            type="text"
+                            value={groupName}
+                            onChange={(e) => setGroupName(e.target.value)}
+                            placeholder="Entrez le nom du nouveau groupe"
+                            onKeyPress={(e) => e.key === 'Enter' && joinGlobalSession()}
+                        />
+                    )}
                 </div>
 
                 <button className="start-button" onClick={joinGlobalSession}>
@@ -326,6 +455,10 @@ function QuizApp() {
     }
 
     if (stage === 'lobby') {
+        // Déterminer si l'utilisateur actuel est le leader
+        const currentPlayer = players.find(p => p.name === playerName);
+        const isLeader = currentPlayer?.isLeader || false;
+
         return (
             <div className="quiz-container">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -352,37 +485,57 @@ function QuizApp() {
                     <ul className="players-list">
                         {players.map((player, index) => (
                             <li key={index} className="player-item">
-                                <span className="player-icon">👤</span>
+                                <span className="player-icon">{player.isLeader ? '👑' : '👤'}</span>
                                 <span className="player-name">{player.name}</span>
-                                {player.name === playerName && <span className="you-badge">(Vous)</span>}
+                                {player.isLeader && <span className="you-badge" style={{background: '#ffa500'}}>Leader</span>}
+                                {player.name === playerName && !player.isLeader && <span className="you-badge">(Vous)</span>}
                             </li>
                         ))}
                     </ul>
                 </div>
 
-                <div className="theme-selection-lobby">
-                    <h2>Choisissez un thème</h2>
-                    <div className="theme-selection">
-                        {themes.map(theme => (
-                            <button
-                                key={theme}
-                                className={`theme-button ${selectedTheme === theme ? 'selected' : ''}`}
-                                onClick={() => setSelectedTheme(theme)}
-                            >
-                                {theme.charAt(0).toUpperCase() + theme.slice(1)}
-                            </button>
-                        ))}
-                    </div>
-                </div>
+                {isLeader ? (
+                    <>
+                        <div className="theme-selection-lobby">
+                            <h2>Choisissez un thème</h2>
+                            <div className="theme-selection">
+                                {themes.map(theme => (
+                                    <button
+                                        key={theme}
+                                        className={`theme-button ${selectedTheme === theme ? 'selected' : ''}`}
+                                        onClick={() => setSelectedTheme(theme)}
+                                    >
+                                        {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
 
-                <button
-                    className="start-button"
-                    onClick={startQuiz}
-                    disabled={!selectedTheme}
-                    style={{ marginTop: '20px' }}
-                >
-                    Démarrer le Quiz
-                </button>
+                        <button
+                            className="start-button"
+                            onClick={startQuiz}
+                            disabled={!selectedTheme}
+                            style={{ marginTop: '20px' }}
+                        >
+                            Démarrer le Quiz
+                        </button>
+                    </>
+                ) : (
+                    <div style={{
+                        textAlign: 'center',
+                        padding: '30px',
+                        background: '#f8f9fa',
+                        borderRadius: '15px',
+                        marginTop: '20px'
+                    }}>
+                        <p style={{ fontSize: '1.2em', color: '#666', marginBottom: '10px' }}>
+                            ⏳ En attente du leader...
+                        </p>
+                        <p style={{ color: '#999' }}>
+                            Le leader du groupe va choisir le thème et démarrer le quiz
+                        </p>
+                    </div>
+                )}
 
                 {notification && (
                     <div className="notification">

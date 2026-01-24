@@ -84,7 +84,8 @@
             font-weight: 500;
         }
 
-        .input-group input {
+        .input-group input,
+        .input-group select {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
@@ -93,9 +94,15 @@
             transition: border-color 0.2s;
         }
 
-        .input-group input:focus {
+        .input-group input:focus,
+        .input-group select:focus {
             outline: none;
             border-color: #667eea;
+        }
+
+        .input-group select {
+            background: white;
+            cursor: pointer;
         }
 
         .question-card {
