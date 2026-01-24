@@ -33,8 +33,6 @@ services:
     image: dunglas/frankenphp:latest
     build:
         context: .
-        ssh:
-            - default
         args:
             APP_ENV: ${APP_ENV}
     container_name: app
