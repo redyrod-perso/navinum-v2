@@ -6,14 +6,17 @@
 
 ###> symfony/framework-bundle ###
 /.env.local
-/.env.prod
-/.env.*.prod
+/.env.local.php
 /.env.*.local
 /config/secrets/prod/prod.decrypt.private.php
 /public/bundles/
 /var/
 /vendor/
 ###< symfony/framework-bundle ###
+
+###> Docker ###
+/.env.prod
+###< Docker ###
 
 ###> phpunit/phpunit ###
 /phpunit.xml
@@ -24,12 +27,3 @@
 /public/assets/
 /assets/vendor/
 ###< symfony/asset-mapper ###
-
-###> symfony/webpack-encore-bundle ###
-/node_modules/
-/public/build/*
-!/public/build/navinum-api.js
-npm-debug.log
-yarn-error.log
-###< symfony/webpack-encore-bundle ###
-
