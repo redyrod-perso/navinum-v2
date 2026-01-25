@@ -4,7 +4,19 @@
 
 :80 {
     root * /app/public
-    php_fastcgi unix//run/php/php.sock
+
+    # Routes SSE avec timeout étendu
+    route /api/session/*/stream {
+        php_fastcgi unix//run/php/php.sock {
+            read_timeout 600s  # 10 minutes pour SSE
+        }
+    }
+
+    # Route PHP normale
+    php_fastcgi unix//run/php/php.sock {
+        read_timeout 60s  # 60 secondes pour requêtes normales
+    }
+
     file_server
 
     mercure {
@@ -17,7 +29,19 @@
 
 srv802003.hstgr.cloud {
     root * /app/public
-    php_fastcgi unix//run/php/php.sock
+
+    # Routes SSE avec timeout étendu
+    route /api/session/*/stream {
+        php_fastcgi unix//run/php/php.sock {
+            read_timeout 600s  # 10 minutes pour SSE
+        }
+    }
+
+    # Route PHP normale
+    php_fastcgi unix//run/php/php.sock {
+        read_timeout 60s  # 60 secondes pour requêtes normales
+    }
+
     file_server
 
     # Proxy Mercure pour le frontend

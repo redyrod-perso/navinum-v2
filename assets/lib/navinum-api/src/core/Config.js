@@ -4,14 +4,14 @@
 export class Config {
     constructor(options = {}) {
         this.baseURL = options.baseURL || window.location.origin;
-        this.timeout = options.timeout || 5000;
+        this.timeout = options.timeout || 30000; // 30 secondes pour la production
         this.headers = options.headers || {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         };
         this.debug = options.debug || false;
-        this.retryAttempts = options.retryAttempts || 2;
-        this.retryDelay = options.retryDelay || 1000;
+        this.retryAttempts = options.retryAttempts || 3; // 3 tentatives
+        this.retryDelay = options.retryDelay || 2000; // 2 secondes entre les tentatives
     }
 
     /**
