@@ -115,75 +115,102 @@ function QuizApp() {
         };
     }, [stage]);
 
-    // SSE pour recevoir les mises à jour en temps réel
+    // SSE pour recevoir les mises à jour en temps réel avec reconnexion automatique
     useEffect(() => {
         if (!sessionId || (stage !== 'lobby' && stage !== 'playing')) {
             return;
         }
 
-        console.log(`[SSE] Connexion au stream pour session ${sessionId}`);
         let eventSource = null;
+        let reconnectTimeout = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+        const baseReconnectDelay = 1000; // 1 seconde
 
-        try {
-            eventSource = new EventSource(`/api/session/${sessionId}/stream`);
+        const connect = () => {
+            if (reconnectAttempts >= maxReconnectAttempts) {
+                console.error('[SSE] Nombre maximum de reconnexions atteint');
+                return;
+            }
 
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
+            console.log(`[SSE] Connexion au stream pour session ${sessionId} (tentative ${reconnectAttempts + 1})`);
 
-                    if (data.type === 'session' && data.session) {
-                        const session = data.session;
-                        console.log('[SSE] Session reçue:', {
-                            status: session.status,
-                            theme: session.theme,
-                            nbPlayers: session.players?.length
-                        });
+            try {
+                eventSource = new EventSource(`/api/session/${sessionId}/stream`);
 
-                        // Mise à jour de la liste des joueurs
-                        if (JSON.stringify(players) !== JSON.stringify(session.players)) {
-                            console.log('[SSE] Mise à jour liste des joueurs');
-                            setPlayers(session.players);
-                        }
+                eventSource.onopen = () => {
+                    console.log('[SSE] Connexion établie');
+                    reconnectAttempts = 0; // Reset le compteur en cas de succès
+                };
 
-                        // Vérifier si le quiz a démarré
-                        if (stage === 'lobby' && session.status === 'playing' && session.theme) {
-                            console.log(`[SSE] Quiz démarré ! Chargement du thème: ${session.theme}`);
-                            loadQuestionsAndStart(session.theme);
-                        }
+                eventSource.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
 
-                        // Mise à jour des scores
-                        if (stage === 'playing' && session.players) {
-                            const newScores = {};
-                            session.players.forEach(player => {
-                                newScores[player.name] = player.score;
+                        if (data.type === 'session' && data.session) {
+                            const session = data.session;
+                            console.log('[SSE] Session reçue:', {
+                                status: session.status,
+                                theme: session.theme,
+                                nbPlayers: session.players?.length
                             });
-                            setScores(newScores);
+
+                            // Mise à jour de la liste des joueurs
+                            if (JSON.stringify(players) !== JSON.stringify(session.players)) {
+                                console.log('[SSE] Mise à jour liste des joueurs');
+                                setPlayers(session.players);
+                            }
+
+                            // Vérifier si le quiz a démarré
+                            if (stage === 'lobby' && session.status === 'playing' && session.theme) {
+                                console.log(`[SSE] Quiz démarré ! Chargement du thème: ${session.theme}`);
+                                loadQuestionsAndStart(session.theme);
+                            }
+
+                            // Mise à jour des scores
+                            if (stage === 'playing' && session.players) {
+                                const newScores = {};
+                                session.players.forEach(player => {
+                                    newScores[player.name] = player.score;
+                                });
+                                setScores(newScores);
+                            }
                         }
+                    } catch (err) {
+                        console.error('[SSE] Erreur parsing:', err);
                     }
-                } catch (err) {
-                    console.error('[SSE] Erreur parsing:', err);
-                }
-            };
+                };
 
-            eventSource.onerror = (err) => {
-                console.error('[SSE] Erreur connexion:', err);
-                eventSource.close();
-            };
+                eventSource.onerror = (err) => {
+                    console.warn('[SSE] Erreur connexion, reconnexion dans ' +
+                        (baseReconnectDelay * (reconnectAttempts + 1)) + 'ms');
+                    eventSource.close();
 
-            eventSource.onopen = () => {
-                console.log('[SSE] Connexion établie');
-            };
-        } catch (err) {
-            console.error('[SSE] Erreur création EventSource:', err);
-        }
+                    // Reconnexion avec backoff exponentiel
+                    const delay = baseReconnectDelay * (reconnectAttempts + 1);
+                    reconnectAttempts++;
+
+                    reconnectTimeout = setTimeout(() => {
+                        connect();
+                    }, delay);
+                };
+            } catch (err) {
+                console.error('[SSE] Erreur création EventSource:', err);
+            }
+        };
+
+        connect();
 
         return () => {
             if (eventSource) {
                 console.log('[SSE] Fermeture de la connexion');
                 eventSource.close();
             }
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+            }
         };
-    }, [sessionId, stage]); // Retiré players de la dépendance pour éviter les reconnexions
+    }, [sessionId, stage]);
 
     const showNotification = (message) => {
         setNotification(message);
@@ -308,18 +335,32 @@ function QuizApp() {
         }
 
         try {
-            await api.sessions.start(sessionId, {
+            // Ne pas bloquer l'UI, laisser le SSE gérer la redirection
+            console.log('[Quiz] Démarrage du quiz...');
+            showNotification('Démarrage du quiz...');
+
+            // Appel non-bloquant (on n'attend pas la réponse complète)
+            api.sessions.start(sessionId, {
                 theme: selectedTheme,
                 playerName: playerName
+            }).then(() => {
+                console.log('[Quiz] Requête de démarrage envoyée avec succès');
+            }).catch(err => {
+                console.error('[Quiz] Erreur démarrage:', err);
+                // Même en cas d'erreur, le SSE peut avoir reçu la mise à jour
+                // Ne pas afficher d'alerte si c'est juste un timeout réseau
+                if (!err.message.includes('Timeout') && !err.message.includes('Network')) {
+                    if (err.message && err.message.includes('leader')) {
+                        alert('Seul le leader du groupe peut démarrer le quiz');
+                    } else {
+                        alert(err.message || 'Impossible de démarrer le quiz');
+                    }
+                }
             });
-            // Le quiz démarrera via le polling
+
+            // Le quiz démarrera via le SSE qui détectera le changement de status
         } catch (err) {
-            console.error('Erreur démarrage quiz:', err);
-            if (err.message && err.message.includes('leader')) {
-                alert('Seul le leader du groupe peut démarrer le quiz');
-            } else {
-                alert(err.message || 'Impossible de démarrer le quiz');
-            }
+            console.error('[Quiz] Erreur inattendue:', err);
         }
     };
 
