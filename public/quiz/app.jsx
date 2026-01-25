@@ -155,8 +155,15 @@ function QuizApp() {
                                 nbPlayers: session.players?.length
                             });
 
-                            // Mise à jour de la liste des joueurs
-                            if (JSON.stringify(players) !== JSON.stringify(session.players)) {
+                            // Mise à jour de la liste des joueurs (comparaison intelligente)
+                            const playersChanged = players.length !== session.players.length ||
+                                players.some((p, i) =>
+                                    p.name !== session.players[i]?.name ||
+                                    p.score !== session.players[i]?.score ||
+                                    p.isLeader !== session.players[i]?.isLeader
+                                );
+
+                            if (playersChanged) {
                                 console.log('[SSE] Mise à jour liste des joueurs');
                                 setPlayers(session.players);
                             }

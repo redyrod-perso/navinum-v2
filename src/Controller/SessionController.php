@@ -335,8 +335,10 @@ class SessionController extends AbstractController
             }
 
             // Boucle de polling pour détecter les changements
-            $timeout = 300; // 5 minutes timeout
+            $timeout = 600; // 10 minutes timeout (correspond au timeout Caddy)
             $startTime = time();
+            $lastHeartbeat = time();
+            $heartbeatInterval = 30; // Heartbeat toutes les 30 secondes
 
             while (time() - $startTime < $timeout) {
                 if (file_exists($updateFile)) {
@@ -355,12 +357,16 @@ class SessionController extends AbstractController
                     }
                 }
 
-                // Heartbeat pour maintenir la connexion
-                echo ": heartbeat\n\n";
-                if (ob_get_level() > 0) {
-                    ob_flush();
+                // Heartbeat toutes les 30 secondes pour maintenir la connexion
+                $now = time();
+                if ($now - $lastHeartbeat >= $heartbeatInterval) {
+                    echo ": heartbeat\n\n";
+                    if (ob_get_level() > 0) {
+                        ob_flush();
+                    }
+                    flush();
+                    $lastHeartbeat = $now;
                 }
-                flush();
 
                 sleep(1);
             }
