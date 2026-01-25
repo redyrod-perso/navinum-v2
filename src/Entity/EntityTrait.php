@@ -10,6 +10,7 @@ trait EntityTrait
 {
     #[ORM\Id]
     #[ORM\Column(type: 'uuid', unique: true)]
+    #[Groups(['rfid_groupe:read'])]
     private Uuid $id;
 
     #[ORM\Column(type: 'datetime_immutable')]
