@@ -2,12 +2,15 @@
 
 namespace App\Dto;
 
-use Symfony\Component\Uid\Uuid;
+
+use Symfony\Component\Serializer\Attribute\Groups;
 
 final readonly class RfidGroupeOutput
 {
     public function __construct(
-        public Uuid $id,
+        #[Groups(['rfid_groupe:read'])]
+        public string $id,
+        #[Groups(['rfid_groupe:read'])]
         public string $nom,
     ) {
     }

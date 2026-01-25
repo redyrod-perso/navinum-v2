@@ -29,14 +29,8 @@ use Symfony\Component\Validator\Constraints as Assert;
 )]
 #[ApiResource(
     operations: [
-        new GetCollection(
-            output: RfidGroupeOutput::class,
-            provider: RfidGroupeProvider::class
-        ),
-        new Get(
-            output: RfidGroupeOutput::class,
-            provider: RfidGroupeProvider::class
-        ),
+        new GetCollection(),
+        new Get(),
         new Post(
             validationContext: ['groups' => ['Default', 'rfid_groupe:create']],
             processor: \App\State\Processor\RfidGroupeProcessor::class
@@ -48,6 +42,7 @@ use Symfony\Component\Validator\Constraints as Assert;
             processor: \App\State\Processor\RfidGroupeProcessor::class
         ),
     ],
+    normalizationContext: ['groups' => ['rfid_groupe:read']],
     denormalizationContext: ['groups' => ['rfid_groupe:write']],
     paginationEnabled: true,
     paginationItemsPerPage: 30
@@ -72,7 +67,7 @@ class RfidGroupe
         max: 255,
         maxMessage: 'Le nom ne peut pas dépasser {{ limit }} caractères.'
     )]
-    #[Groups(['rfid_groupe:write'])]
+    #[Groups(['rfid_groupe:read', 'rfid_groupe:write'])]
     private ?string $nom = null;
 
     #[ORM\Column(type: 'boolean', options: ['default' => 1])]

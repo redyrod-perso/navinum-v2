@@ -57,7 +57,7 @@ final readonly class RfidGroupeProvider implements ProviderInterface
     private function transformToDto(RfidGroupe $rfidGroupe): RfidGroupeOutput
     {
         return new RfidGroupeOutput(
-            id: $rfidGroupe->getId(),
+            id: $rfidGroupe->getId()->toRfc4122(),
             nom: $rfidGroupe->getNom(),
         );
     }

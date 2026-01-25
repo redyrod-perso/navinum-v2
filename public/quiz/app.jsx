@@ -36,14 +36,32 @@ function QuizApp() {
 
     // Fonction pour charger les groupes existants
     const loadGroups = () => {
-        fetch('/api/rfid_groupes')
-            .then(res => res.json())
+        fetch('/api/rfid_groupes', {
+            headers: {
+                'Accept': 'application/ld+json'
+            }
+        })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('Erreur HTTP: ' + res.status);
+                }
+                return res.json();
+            })
             .then(data => {
-                if (data.member && Array.isArray(data.member)) {
-                    setExistingGroups(data.member);
+                console.log('Groupes reçus:', data);
+                // API Platform retourne hydra:member ou member
+                const groupes = data['hydra:member'] || data.member || [];
+                if (Array.isArray(groupes)) {
+                    setExistingGroups(groupes);
+                } else {
+                    console.error('Format inattendu:', data);
+                    setExistingGroups([]);
                 }
             })
-            .catch(err => console.error('Erreur chargement groupes:', err));
+            .catch(err => {
+                console.error('Erreur chargement groupes:', err);
+                setExistingGroups([]);
+            });
     };
 
     // Charger les groupes au montage et à chaque fois qu'on revient sur home
@@ -99,58 +117,73 @@ function QuizApp() {
 
     // SSE pour recevoir les mises à jour en temps réel
     useEffect(() => {
-        if (sessionId && (stage === 'lobby' || stage === 'playing')) {
-            let eventSource = null;
+        if (!sessionId || (stage !== 'lobby' && stage !== 'playing')) {
+            return;
+        }
 
-            try {
-                eventSource = new EventSource(`/api/session/${sessionId}/stream`);
+        console.log(`[SSE] Connexion au stream pour session ${sessionId}`);
+        let eventSource = null;
 
-                eventSource.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
+        try {
+            eventSource = new EventSource(`/api/session/${sessionId}/stream`);
 
-                        if (data.type === 'session' && data.session) {
-                            const session = data.session;
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
 
-                            // Mise à jour de la liste des joueurs
-                            if (JSON.stringify(players) !== JSON.stringify(session.players)) {
-                                setPlayers(session.players);
-                            }
+                    if (data.type === 'session' && data.session) {
+                        const session = data.session;
+                        console.log('[SSE] Session reçue:', {
+                            status: session.status,
+                            theme: session.theme,
+                            nbPlayers: session.players?.length
+                        });
 
-                            // Vérifier si le quiz a démarré
-                            if (stage === 'lobby' && session.status === 'playing' && session.theme) {
-                                loadQuestionsAndStart(session.theme);
-                            }
-
-                            // Mise à jour des scores
-                            if (stage === 'playing' && session.players) {
-                                const newScores = {};
-                                session.players.forEach(player => {
-                                    newScores[player.name] = player.score;
-                                });
-                                setScores(newScores);
-                            }
+                        // Mise à jour de la liste des joueurs
+                        if (JSON.stringify(players) !== JSON.stringify(session.players)) {
+                            console.log('[SSE] Mise à jour liste des joueurs');
+                            setPlayers(session.players);
                         }
-                    } catch (err) {
-                        console.error('Erreur parsing SSE:', err);
+
+                        // Vérifier si le quiz a démarré
+                        if (stage === 'lobby' && session.status === 'playing' && session.theme) {
+                            console.log(`[SSE] Quiz démarré ! Chargement du thème: ${session.theme}`);
+                            loadQuestionsAndStart(session.theme);
+                        }
+
+                        // Mise à jour des scores
+                        if (stage === 'playing' && session.players) {
+                            const newScores = {};
+                            session.players.forEach(player => {
+                                newScores[player.name] = player.score;
+                            });
+                            setScores(newScores);
+                        }
                     }
-                };
-
-                eventSource.onerror = (err) => {
-                    console.error('Erreur SSE:', err);
-                    eventSource.close();
-                };
-            } catch (err) {
-                console.error('Erreur création EventSource:', err);
-            }
-
-            return () => {
-                if (eventSource) {
-                    eventSource.close();
+                } catch (err) {
+                    console.error('[SSE] Erreur parsing:', err);
                 }
             };
+
+            eventSource.onerror = (err) => {
+                console.error('[SSE] Erreur connexion:', err);
+                eventSource.close();
+            };
+
+            eventSource.onopen = () => {
+                console.log('[SSE] Connexion établie');
+            };
+        } catch (err) {
+            console.error('[SSE] Erreur création EventSource:', err);
         }
-    }, [sessionId, stage, playerName, players]);
+
+        return () => {
+            if (eventSource) {
+                console.log('[SSE] Fermeture de la connexion');
+                eventSource.close();
+            }
+        };
+    }, [sessionId, stage]); // Retiré players de la dépendance pour éviter les reconnexions
 
     const showNotification = (message) => {
         setNotification(message);

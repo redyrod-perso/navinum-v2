@@ -14,3 +14,16 @@
         anonymous
     }
 }
+
+srv802003.hstgr.cloud {
+    root * /app/public
+    php_fastcgi unix//run/php/php.sock
+    file_server
+
+    # Proxy Mercure pour le frontend
+    route /.well-known/mercure* {
+        reverse_proxy mercure:3000 {
+            flush_interval -1  # obligatoire pour SSE
+        }
+    }
+}
