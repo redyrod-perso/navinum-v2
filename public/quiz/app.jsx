@@ -81,7 +81,7 @@ function QuizApp() {
 
         try {
             // S'abonner au topic des groupes RFID
-            const mercureUrl = new URL('http://localhost:3000/.well-known/mercure');
+            const mercureUrl = new URL('http://srv802003.hstgr.cloud:3000/.well-known/mercure');
             mercureUrl.searchParams.append('topic', 'rfid-groupes');
 
             eventSource = new EventSource(mercureUrl);
