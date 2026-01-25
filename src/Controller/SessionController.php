@@ -279,7 +279,8 @@ class SessionController extends AbstractController
         $this->saveSession($sessionId, $session);
         $this->notifySessionUpdate($sessionId);
 
-        return new JsonResponse(['status' => 'ok', 'session' => $session]);
+        // Réponse minimale (le frontend ne l'utilise plus, il se redirige immédiatement)
+        return new JsonResponse(['status' => 'ok']);
     }
 
     #[Route('/api/session/{sessionId}/score', name: 'api_session_score', methods: ['POST'])]

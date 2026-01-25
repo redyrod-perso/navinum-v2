@@ -342,32 +342,29 @@ function QuizApp() {
         }
 
         try {
-            // Ne pas bloquer l'UI, laisser le SSE gérer la redirection
-            console.log('[Quiz] Démarrage du quiz...');
+            console.log('[Quiz] Démarrage immédiat du quiz pour le leader...');
             showNotification('Démarrage du quiz...');
 
-            // Appel non-bloquant (on n'attend pas la réponse complète)
+            // OPTIMISATION : Le leader démarre IMMÉDIATEMENT (pas besoin d'attendre le SSE)
+            // Il connaît déjà le thème qu'il a choisi
+            loadQuestionsAndStart(selectedTheme);
+
+            // En parallèle, notifier les autres joueurs via l'API
+            // Appel non-bloquant pour ne pas ralentir le leader
             api.sessions.start(sessionId, {
                 theme: selectedTheme,
                 playerName: playerName
             }).then(() => {
-                console.log('[Quiz] Requête de démarrage envoyée avec succès');
+                console.log('[Quiz] Autres joueurs notifiés via API');
             }).catch(err => {
-                console.error('[Quiz] Erreur démarrage:', err);
-                // Même en cas d'erreur, le SSE peut avoir reçu la mise à jour
-                // Ne pas afficher d'alerte si c'est juste un timeout réseau
-                if (!err.message.includes('Timeout') && !err.message.includes('Network')) {
-                    if (err.message && err.message.includes('leader')) {
-                        alert('Seul le leader du groupe peut démarrer le quiz');
-                    } else {
-                        alert(err.message || 'Impossible de démarrer le quiz');
-                    }
-                }
+                console.error('[Quiz] Erreur notification API:', err);
+                // Pas grave, le leader est déjà redirigé
+                // Les autres recevront la mise à jour via SSE
             });
 
-            // Le quiz démarrera via le SSE qui détectera le changement de status
         } catch (err) {
             console.error('[Quiz] Erreur inattendue:', err);
+            alert('Erreur lors du démarrage: ' + err.message);
         }
     };
 
