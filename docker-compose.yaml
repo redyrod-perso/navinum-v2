@@ -1,92 +1,92 @@
 services:
-  database:
-    image: postgres:16-alpine
-    container_name: navinum_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - database_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - navinum_network
+    database:
+        image: postgres:16-alpine
+        container_name: navinum_db
+        restart: unless-stopped
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+            POSTGRES_DB: ${POSTGRES_DB}
+        volumes:
+            - database_data:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        networks:
+            - navinum_network
 
-  mercure:
-    image: dunglas/mercure
-    container_name: navinum_mercure
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      SERVER_NAME: ':3000'
-      MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_JWT_SECRET}
-      MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_JWT_SECRET}
-      MERCURE_EXTRA_DIRECTIVES: |
-        anonymous
-        cors_origins *
-    networks:
-      - navinum_network
+    mercure:
+        image: dunglas/mercure
+        container_name: navinum_mercure
+        restart: unless-stopped
+          #ports:
+        #- "3000:3000"
+        environment:
+            SERVER_NAME: ':3000'
+            MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_JWT_SECRET}
+            MERCURE_SUBSCRIBER_JWT_KEY: ${MERCURE_JWT_SECRET}
+            MERCURE_EXTRA_DIRECTIVES: |
+                anonymous
+                cors_origins *
+        networks:
+            - navinum_network
 
-  app:
-    image: dunglas/frankenphp:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        APP_ENV: ${APP_ENV}
-    container_name: navinum_app
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    environment:
-      APP_ENV: ${APP_ENV}
-      APP_DEBUG: ${APP_DEBUG}
-      APP_SECRET: ${APP_SECRET}
-      DATABASE_URL: ${DATABASE_URL}
-      SERVER_NAME: ${SERVER_NAME}
-      MERCURE_URL: ${MERCURE_URL}
-      MERCURE_PUBLIC_URL: ${MERCURE_PUBLIC_URL}
-      MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET}
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES}
-      TRUSTED_HOSTS: ${TRUSTED_HOSTS}
-      CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN}
-      MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN}
-    volumes:
-      - .:/app
-      - caddy_data:/data
-      - caddy_config:/config
-    working_dir: /app
-    depends_on:
-      database:
-        condition: service_healthy
-      mercure:
-        condition: service_started
-    networks:
-      - navinum_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+            args:
+                APP_ENV: ${APP_ENV}
+        container_name: navinum_app
+        restart: unless-stopped
+        ports:
+            - "80:80"
+            - "443:443"
+            - "443:443/udp"
+        environment:
+            APP_ENV: ${APP_ENV}
+            APP_DEBUG: ${APP_DEBUG}
+            APP_SECRET: ${APP_SECRET}
+            DATABASE_URL: ${DATABASE_URL}
+            SERVER_NAME: ${SERVER_NAME}
+            MERCURE_URL: ${MERCURE_URL}
+            MERCURE_PUBLIC_URL: ${MERCURE_PUBLIC_URL}
+            MERCURE_JWT_SECRET: ${MERCURE_JWT_SECRET}
+            TRUSTED_PROXIES: ${TRUSTED_PROXIES}
+            TRUSTED_HOSTS: ${TRUSTED_HOSTS}
+            CORS_ALLOW_ORIGIN: ${CORS_ALLOW_ORIGIN}
+            MESSENGER_TRANSPORT_DSN: ${MESSENGER_TRANSPORT_DSN}
+        volumes:
+            - .:/app
+            - ./Caddyfile:/etc/frankenphp/Caddyfile:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        working_dir: /app
+        depends_on:
+            database:
+                condition: service_healthy
+            mercure:
+                condition: service_started
+        networks:
+            - navinum_network
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost/"]
+            interval: 30s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
 
 volumes:
-  database_data:
-    driver: local
-  caddy_data:
-    driver: local
-  caddy_config:
-    driver: local
+    database_data:
+        driver: local
+    caddy_data:
+        driver: local
+    caddy_config:
+        driver: local
 
 networks:
-  navinum_network:
-    driver: bridge
+    navinum_network:
+        driver: bridge

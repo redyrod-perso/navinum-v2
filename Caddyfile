@@ -1,63 +1,19 @@
 {
-    auto_https off
+    frankenphp
 }
 
-:80 {
+activites-touristiques.online {
     root * /app/public
+    encode zstd br gzip
 
-    # Routes SSE avec timeout étendu
-    route /api/session/*/stream {
-        php_fastcgi unix//run/php/php.sock {
-            read_timeout 600s  # 10 minutes pour SSE
-        }
-    }
-
-    # Route PHP normale
-    php_fastcgi unix//run/php/php.sock {
-        read_timeout 60s  # 60 secondes pour requêtes normales
-    }
-
-    file_server
-
-    mercure {
-        transport_url http://mercure:3000/.well-known/mercure
-        publisher_jwt "SUPER_SECRET_PUBLISHER"
-        subscriber_jwt "SUPER_SECRET_SUBSCRIBER"
-        anonymous
-    }
-}
-
-srv802003.hstgr.cloud {
-    root * /app/public
-
-    # Routes SSE avec timeout étendu et buffer désactivé
-    @sse path /api/session/*/stream
-    handle @sse {
-        php_fastcgi unix//run/php/php.sock {
-            read_timeout 600s
-            resolve_root_symlink false
-            env HTTP_X_ACCEL_BUFFERING no
-        }
-    }
-
-    # Routes API normales
-    @api path /api/*
-    handle @api {
-        php_fastcgi unix//run/php/php.sock {
-            read_timeout 60s
-            resolve_root_symlink false
-        }
-    }
-
-    # Proxy Mercure pour le frontend
-    route /.well-known/mercure* {
+    # Mercure reverse proxy (handle exclusif - EN PREMIER)
+    @mercure path /.well-known/mercure*
+    handle @mercure {
         reverse_proxy mercure:3000 {
             flush_interval -1
         }
     }
 
-    # Autres routes PHP
-    php_fastcgi unix//run/php/php.sock
-
-    file_server
+    # Toutes les autres routes utilisent php_server (FrankenPHP)
+    php_server
 }
