@@ -1,0 +1,19 @@
+{
+    frankenphp
+}
+
+activites-touristiques.online {
+    root * /app/public
+    encode zstd br gzip
+
+    # Mercure reverse proxy (handle exclusif - EN PREMIER)
+    @mercure path /.well-known/mercure*
+    handle @mercure {
+        reverse_proxy mercure:3000 {
+            flush_interval -1
+        }
+    }
+
+    # Toutes les autres routes utilisent php_server (FrankenPHP)
+    php_server
+}
