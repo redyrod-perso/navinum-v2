@@ -22,8 +22,8 @@ services:
         image: dunglas/mercure
         container_name: navinum_mercure
         restart: unless-stopped
-          #ports:
-        #- "3000:3000"
+        ports:
+            - "3000:3000"
         environment:
             SERVER_NAME: ':3000'
             MERCURE_PUBLISHER_JWT_KEY: ${MERCURE_JWT_SECRET}
@@ -43,9 +43,9 @@ services:
         container_name: navinum_app
         restart: unless-stopped
         ports:
-            - "80:80"
-            - "443:443"
-            - "443:443/udp"
+            - "8002:80"
+            - "8443:443"
+            - "8443:443/udp"
         environment:
             APP_ENV: ${APP_ENV}
             APP_DEBUG: ${APP_DEBUG}

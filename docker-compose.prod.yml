@@ -1,0 +1,42 @@
+# Docker Compose override pour PRODUCTION avec Traefik
+# Usage: docker-compose -f docker-compose.yaml -f docker-compose.prod.yml up -d
+
+services:
+  app:
+    # Ne pas exposer les ports - Traefik s'en charge
+    ports: []
+    
+    # Labels Traefik pour routage et SSL
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.navinum.rule=Host(\`activites-touristiques.online\`)"
+      - "traefik.http.routers.navinum.entrypoints=web,websecure"
+      - "traefik.http.routers.navinum.tls=true"
+      # Commenté jusqu'à trouver le bon certresolver
+      # - "traefik.http.routers.navinum.tls.certresolver=letsencrypt"
+      - "traefik.http.services.navinum.loadbalancer.server.port=80"
+    
+    # Utiliser Caddyfile de production
+    volumes:
+      - .:/app
+      - ./Caddyfile.prod:/etc/frankenphp/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    
+    # Rejoindre le réseau Traefik
+    networks:
+      - navinum_network
+      - root_default
+
+  mercure:
+    # Ne pas exposer le port 3000 publiquement
+    ports: []
+
+networks:
+  root_default:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:
+  database_data:
