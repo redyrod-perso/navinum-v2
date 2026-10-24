@@ -9,7 +9,7 @@ services:
     # Labels Traefik pour routage et SSL
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.navinum.rule=Host(\`activites-touristiques.online\`)"
+      - "traefik.http.routers.navinum.rule=Host(`activites-touristiques.online`)"
       - "traefik.http.routers.navinum.entrypoints=web,websecure"
       - "traefik.http.routers.navinum.tls=true"
       # Commenté jusqu'à trouver le bon certresolver
