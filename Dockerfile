@@ -24,9 +24,12 @@ RUN docker-php-ext-install zip
 # Installer Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Installer les dépendances PHP (sans dev en production)
+# Installer les dépendances PHP (sans dev en production, sans scripts)
 RUN if [ "$APP_ENV" = "prod" ]; then \
-        composer install --no-dev --optimize-autoloader --no-interaction; \
+        composer install --no-dev --optimize-autoloader --no-interaction --no-scripts; \
     else \
-        composer install --no-interaction; \
+        composer install --no-interaction --no-scripts; \
     fi
+
+# Créer les répertoires nécessaires
+RUN mkdir -p var/cache var/log var/sessions
