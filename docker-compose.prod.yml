@@ -8,6 +8,10 @@ services:
       args:
         APP_ENV: prod
 
+    # Forcer APP_ENV=prod au runtime (override la valeur du .env)
+    environment:
+      APP_ENV: prod
+
     # Ne pas exposer les ports - Traefik s'en charge
     ports: []
 
