@@ -13,7 +13,8 @@ services:
       APP_ENV: prod
 
     # Ne pas exposer les ports - Traefik s'en charge
-    ports: []
+    # IMPORTANT: !reset est nécessaire pour supprimer les ports du fichier base
+    ports: !reset []
 
     # Labels Traefik pour routage et SSL
     labels:
@@ -39,7 +40,8 @@ services:
 
   mercure:
     # Ne pas exposer le port 3000 publiquement
-    ports: []
+    # IMPORTANT: !reset est nécessaire pour supprimer les ports du fichier base
+    ports: !reset []
 
 networks:
   root_default:
