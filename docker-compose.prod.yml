@@ -22,8 +22,8 @@ services:
       - "traefik.http.routers.navinum.rule=Host(`activites-touristiques.online`)"
       - "traefik.http.routers.navinum.entrypoints=web,websecure"
       - "traefik.http.routers.navinum.tls=true"
-      # Commenté jusqu'à trouver le bon certresolver
-      # - "traefik.http.routers.navinum.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.navinum.tls.certresolver=mytlschallenge"
+      - "traefik.http.routers.navinum.priority=100"
       - "traefik.http.services.navinum.loadbalancer.server.port=80"
     
     # Utiliser Caddyfile de production
