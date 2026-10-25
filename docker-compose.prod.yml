@@ -3,9 +3,14 @@
 
 services:
   app:
+    # Build avec APP_ENV=prod pour installer les dépendances sans dev
+    build:
+      args:
+        APP_ENV: prod
+
     # Ne pas exposer les ports - Traefik s'en charge
     ports: []
-    
+
     # Labels Traefik pour routage et SSL
     labels:
       - "traefik.enable=true"
