@@ -25,6 +25,7 @@ services:
       - "traefik.http.routers.navinum.tls.certresolver=mytlschallenge"
       - "traefik.http.routers.navinum.priority=100"
       - "traefik.http.services.navinum.loadbalancer.server.port=80"
+      - "traefik.docker.network=root_default"
     
     # Utiliser Caddyfile de production
     volumes:
