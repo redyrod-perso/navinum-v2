@@ -11,6 +11,16 @@ const { NotFoundError, GoneError } = NavinumAPI;
 // Manifeste de l'interactif : son configSchema porte les valeurs par défaut
 const MANIFEST_URL = '/quiz/navinum.json';
 
+/**
+ * URL d'abonnement au hub Mercure intégré à FrankenPHP (même domaine que le site,
+ * sauf si window.APP_CONFIG.MERCURE_PUBLIC_URL indique un autre hub).
+ */
+function mercureSubscribeUrl(topic) {
+    const hub = new URL(window.APP_CONFIG?.MERCURE_PUBLIC_URL || '/.well-known/mercure', window.location.origin);
+    hub.searchParams.append('topic', topic);
+    return hub.toString();
+}
+
 // Jeton de lancement Navinum (?nv=) - null en mode autonome / développement
 const LAUNCH_TOKEN = NavinumAPI.getLaunchToken();
 
@@ -299,12 +309,8 @@ function QuizApp() {
         let eventSource = null;
 
         try {
-            // S'abonner au topic des groupes RFID
-            const mercurePublicUrl = window.APP_CONFIG?.MERCURE_PUBLIC_URL || 'https://activites-touristiques.online/.well-known/mercure';
-            const mercureUrl = new URL(mercurePublicUrl);
-            mercureUrl.searchParams.append('topic', 'rfid-groupes');
-
-            eventSource = new EventSource(mercureUrl);
+            // S'abonner au topic des groupes RFID (hub Mercure du site courant)
+            eventSource = new EventSource(mercureSubscribeUrl('rfid-groupes'));
 
             eventSource.onmessage = (event) => {
                 try {
@@ -335,7 +341,9 @@ function QuizApp() {
         };
     }, [stage]);
 
-    // SSE pour recevoir les mises à jour en temps réel avec reconnexion automatique
+    // Mises à jour de la session en temps réel via le hub Mercure (topic /navinum/sessions/{id}),
+    // avec reconnexion automatique. À chaque (re)connexion, l'état courant est relu une fois
+    // pour ne rien manquer entre l'arrivée dans le lobby et l'abonnement.
     useEffect(() => {
         if (!sessionId || (stage !== 'lobby' && stage !== 'playing')) {
             return;
@@ -353,14 +361,22 @@ function QuizApp() {
                 return;
             }
 
-            console.log(`[SSE] Connexion au stream pour session ${sessionId} (tentative ${reconnectAttempts + 1})`);
+            console.log(`[SSE] Abonnement Mercure à la session ${sessionId} (tentative ${reconnectAttempts + 1})`);
 
             try {
-                eventSource = new EventSource(`/api/session/${sessionId}/stream`);
+                eventSource = new EventSource(mercureSubscribeUrl(`/navinum/sessions/${sessionId}`));
 
                 eventSource.onopen = () => {
                     console.log('[SSE] Connexion établie');
                     reconnectAttempts = 0; // Reset le compteur en cas de succès
+                    // Synchronisation initiale (remplace le premier message de l'ancien flux PHP)
+                    api.sessions.get(sessionId)
+                        .then(res => {
+                            if (res && res.session && eventSource) {
+                                eventSource.onmessage({ data: JSON.stringify({ type: 'session', session: res.session }) });
+                            }
+                        })
+                        .catch(err => console.warn('[SSE] Synchronisation initiale impossible:', err));
                 };
 
                 eventSource.onmessage = (event) => {
