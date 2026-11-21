@@ -458,6 +458,102 @@ await api.rfid.associate('TAG789', {
 
 ---
 
+### Lancement d'un interactif (jeton `?nv=`)
+
+> Depuis la version 0.2.0
+
+Navinum ouvre un interactif via `<url de l'interactif>?nv=<token>`. Le jeton donne accès au
+**contexte de lancement** : l'interactif, le parcours, l'exposition, le visiteur éventuel et
+surtout la **configuration fusionnée** (valeurs saisies pour le parcours par-dessus les `default`
+du `configSchema` déclaré par l'interactif dans son manifeste `navinum.json`).
+
+#### Récupérer le contexte
+
+```javascript
+const api = new NavinumAPI();
+
+// Lit automatiquement ?nv= dans window.location.search
+const ctx = await api.launch();
+
+// ...ou avec un jeton explicite
+// const ctx = await api.launch('abc123');
+
+if (ctx) {
+    console.log(ctx.token);       // 'abc123'
+    console.log(ctx.interactif);  // { id, libelle, version }
+    console.log(ctx.parcours);    // { id, libelle } | null
+    console.log(ctx.exposition);  // { id, libelle } | null
+    console.log(ctx.config);      // { tempsParQuestion: 20, nbQuestions: 10, ... }
+    console.log(ctx.visiteur);    // { id, pseudo, anonyme } | null
+    console.log(ctx.expiresAt);   // '2026-11-21T18:00:00+01:00'
+    console.log(ctx.mercure);     // { hub, topics: { config } } | null (0.3.0+)
+} else {
+    // Aucun ?nv= : interactif lancé hors Navinum (mode autonome / dev)
+    // -> utiliser les valeurs `default` du configSchema
+}
+```
+
+`api.launch()` retourne `null` (sans appel réseau) quand aucun jeton n'est présent.
+Pour simplement tester la présence d'un jeton : `NavinumAPI.getLaunchToken()` (retourne le jeton ou `null`).
+
+#### Envoyer des événements
+
+```javascript
+await ctx.track('quiz.started', { theme: 'histoire' });
+await ctx.track('quiz.completed', { theme: 'histoire', score: 8, total: 10 });
+// -> POST /api/launch/{token}/events  { "type": "...", "payload": { ... } }  => 202 { accepted: true }
+```
+
+Les types d'événements doivent être déclarés dans la clé `events` du manifeste `navinum.json` de l'interactif.
+
+#### Suivre les modifications de configuration en direct (Mercure)
+
+> Depuis la version 0.3.0
+
+Quand un organisateur enregistre la configuration dans l'admin, Navinum publie
+`{"config": { …config effective complète… }}` sur le topic `ctx.mercure.topics.config`.
+
+```javascript
+const unsubscribe = ctx.onConfigChange(config => {
+    // Nouvelle configuration complète (même forme que ctx.config)
+    console.log('Configuration mise à jour', config);
+});
+
+// Pour arrêter l'écoute (ferme l'EventSource)
+unsubscribe();
+```
+
+- Ouvre un `EventSource` sur `<hub>?topic=<topics.config>` (topic URL-encodé), abonnement anonyme.
+- `callback(config)` est appelé à chaque message contenant un objet `config` ; les messages illisibles sont ignorés.
+- Si `ctx.mercure` est `null` (aperçu hors parcours) ou si `EventSource` n'existe pas, c'est un no-op
+  qui retourne une fonction vide : on peut appeler `unsubscribe()` sans test préalable.
+- Variante bas niveau : `LaunchAPI.subscribeConfig(mercure, callback)`.
+
+#### Erreurs
+
+```javascript
+try {
+    const ctx = await api.launch();
+} catch (error) {
+    if (error instanceof NavinumAPI.GoneError) {
+        // 410 : jeton expiré
+    } else if (error instanceof NavinumAPI.NotFoundError) {
+        // 404 : jeton inconnu
+    } else if (error instanceof NavinumAPI.NetworkError) {
+        // serveur injoignable
+    }
+}
+```
+
+#### Accès bas niveau
+
+```javascript
+const data = await api.launches.get('abc123');                          // GET /api/launch/{token}
+await api.launches.sendEvent('abc123', 'quiz.completed', { score: 8 }); // POST /api/launch/{token}/events
+```
+
+---
+
 ### Log Visites (Analytics, Tracking)
 
 #### Enregistrer une action
@@ -524,6 +620,7 @@ La librairie fournit une hiérarchie d'erreurs pour gérer les différents cas :
 - `ValidationError` - Données invalides (HTTP 400)
 - `UnauthorizedError` - Non autorisé (HTTP 401)
 - `NotFoundError` - Ressource introuvable (HTTP 404)
+- `GoneError` - Ressource expirée, ex. jeton de lancement (HTTP 410)
 - `ServerError` - Erreur serveur (HTTP 500+)
 
 ### Accès aux classes d'erreur
@@ -539,6 +636,7 @@ import {
     ValidationError,
     UnauthorizedError,
     NotFoundError,
+    GoneError,
     ServerError
 } from '@navinum/api';
 ```
@@ -920,7 +1018,8 @@ navinum-api/
 │   │   ├── InteractifAPI.js    # API Interactifs
 │   │   ├── VisiteurAPI.js      # API Visiteurs
 │   │   ├── RfidAPI.js          # API RFID
-│   │   └── LogVisiteAPI.js     # API Logs
+│   │   ├── LogVisiteAPI.js     # API Logs
+│   │   └── LaunchAPI.js        # API Lancement (jeton ?nv=)
 │   └── index.js                # Point d'entrée principal
 ├── dist/                       # Builds générés
 │   ├── navinum-api.js          # Version développement

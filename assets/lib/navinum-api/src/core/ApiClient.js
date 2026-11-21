@@ -3,6 +3,7 @@ import {
     ValidationError,
     UnauthorizedError,
     NotFoundError,
+    GoneError,
     ServerError,
     NavinumAPIError
 } from './Errors.js';
@@ -83,6 +84,8 @@ export class ApiClient {
                 throw new UnauthorizedError(response?.message);
             case 404:
                 throw new NotFoundError(response?.message);
+            case 410:
+                throw new GoneError(response?.message);
             case 500:
             case 502:
             case 503:

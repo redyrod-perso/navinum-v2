@@ -18,16 +18,8 @@ class XpControllerTest extends ApiTestCase
         $em = static::getContainer()->get('doctrine')->getManager();
         $connection = $em->getConnection();
 
-        // Disable foreign key checks temporarily
-        $connection->executeStatement('SET FOREIGN_KEY_CHECKS=0');
-
-        // Truncate tables
-        $connection->executeStatement('TRUNCATE TABLE xp');
-        $connection->executeStatement('TRUNCATE TABLE visiteur');
-        $connection->executeStatement('TRUNCATE TABLE typologie');
-
-        // Re-enable foreign key checks
-        $connection->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+        // Vide les tables (PostgreSQL : CASCADE gère les clés étrangères)
+        $connection->executeStatement('TRUNCATE TABLE xp, visiteur, typologie CASCADE');
     }
 
     public function testGetTotalWithoutVisiteurId(): void

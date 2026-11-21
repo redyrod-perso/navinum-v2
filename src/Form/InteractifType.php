@@ -3,8 +3,6 @@
 namespace App\Form;
 
 use App\Entity\Interactif;
-use App\Entity\Parcours;
-use Symfony\Bridge\Doctrine\Form\Type\EntityType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
@@ -14,6 +12,8 @@ use Symfony\Component\Form\Extension\Core\Type\TextareaType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
+use Symfony\Component\Validator\Constraints\Callback;
+use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
 class InteractifType extends AbstractType
 {
@@ -94,6 +94,25 @@ class InteractifType extends AbstractType
                 'widget' => 'single_text',
                 'required' => false,
             ])
+            ->add('url_fichier_interactif', TextType::class, [
+                'label' => 'URL de lancement',
+                'required' => false,
+                'help' => 'URL ouverte avec le jeton ?nv=… (ex. /quiz/index.html ou https://jeu.exemple.org/).',
+            ])
+            ->add('variable', TextareaType::class, [
+                'label' => 'Configuration (JSON Schema)',
+                'required' => false,
+                'attr' => ['rows' => 16, 'class' => 'font-monospace', 'spellcheck' => 'false'],
+                'help' => 'Réglages déclarés par l\'interactif : un JSON Schema dont les « default » forment la config initiale. Le formulaire de configuration de chaque parcours est généré à partir de ce schéma.',
+                'constraints' => [new Callback(static function (?string $value, ExecutionContextInterface $context): void {
+                    if (null === $value || '' === trim($value)) {
+                        return;
+                    }
+                    if (!\is_array(json_decode($value, true))) {
+                        $context->addViolation('JSON invalide : '.json_last_error_msg());
+                    }
+                })],
+            ])
             ->add('score', TextareaType::class, [
                 'label' => 'Score',
                 'required' => false,
@@ -113,10 +132,6 @@ class InteractifType extends AbstractType
                     'Web' => 'web',
                 ],
                 'placeholder' => 'Choisir un type',
-            ])
-            ->add('url_fichier_interactif', TextType::class, [
-                'label' => 'URL fichier interactif',
-                'required' => false,
             ])
             ->add('url_pierre_de_rosette', TextType::class, [
                 'label' => 'URL pierre de rosette',
@@ -176,18 +191,6 @@ class InteractifType extends AbstractType
             ])
             ->add('refresh_deploiement', CheckboxType::class, [
                 'label' => 'Déploiement à générer',
-                'required' => false,
-            ])
-            ->add('ordre', IntegerType::class, [
-                'label' => 'Ordre',
-                'required' => false,
-            ])
-            ->add('parcours', EntityType::class, [
-                'class' => Parcours::class,
-                'choice_label' => 'libelle',
-                'label' => 'Parcours',
-                'multiple' => true,
-                'expanded' => true,
                 'required' => false,
             ])
             ->add('is_tosync', CheckboxType::class, [

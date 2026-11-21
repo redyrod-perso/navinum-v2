@@ -6,10 +6,10 @@ Auto-generated from all feature plans. Last updated: 2025-01-17
 
 ### Backend
 - PHP 8.3+ avec Symfony 7
-- Sylius Bundle pour administration
+- Admin en Symfony pur (contrôleurs CRUD génériques + Twig Bootstrap 5) — Sylius et EasyAdmin ont été abandonnés
 - Doctrine ORM avec entités existantes
 - API Platform pour APIs REST
-- FrankenPHP + Mercure pour performances
+- FrankenPHP en **mode worker** + **hub Mercure intégré** (temps réel) + Vulcain
 - Bootstrap 5 pour interface moderne
 
 ### Frontend / Interactifs
@@ -24,20 +24,20 @@ Auto-generated from all feature plans. Last updated: 2025-01-17
 # Backend Symfony
 src/
 ├── Entity/          # Entités Doctrine (Parcours, Exposition, Interactif, Visiteur, etc.)
-├── Form/            # Formulaires Sylius
+├── Form/            # Formulaires Symfony
 ├── Repository/      # Repositories avec QueryBuilders optimisés
 ├── Controller/      # Contrôleurs (Admin + API)
-│   ├── Admin/       # Administration Sylius
+│   ├── Admin/       # Administration (AbstractCrudController + un contrôleur par section)
 │   └── SessionController.php  # API Sessions pour quiz
 ├── ApiResource/     # Ressources API Platform
 └── EventSubscriber/ # Event subscribers
 
 config/
-├── packages/        # Configuration bundles (API Platform, Sylius, etc.)
+├── packages/        # Configuration bundles (API Platform, Mercure, security…)
 └── routes/          # Routes (admin, API)
 
 templates/
-├── admin/           # Templates administration Sylius
+├── admin/           # Templates administration (layout, crud/ générique, parcours/, interactif/)
 └── security/        # Templates authentification
 
 # Frontend / Interactifs
@@ -46,7 +46,7 @@ public/
 │   ├── index.html
 │   ├── app.jsx      # Composant principal React
 │   ├── styles.css
-│   └── questions/   # Fichiers de questions par thème
+│   └── navinum.json # Manifeste : métadonnées + JSON Schema de configuration (thèmes, questions…)
 ├── build/           # Librairies JS buildées
 │   └── navinum-api.js
 └── ...
@@ -76,14 +76,14 @@ bin/console cache:clear
 bin/console doctrine:mapping:info
 
 # Tests et validation
-bin/console debug:config sylius_resource
 bin/console debug:router                      # Toutes les routes
 bin/console debug:router | grep parcours      # Routes parcours
 bin/console debug:router | grep api           # Routes API
 
-# Développement
-composer require sylius/grid-bundle
-bin/console sylius:theme:assets:install
+# Comptes et interactifs
+bin/console app:user:create admin@exemple.fr --admin            # compte administrateur
+bin/console app:user:create musee@exemple.fr --organisateur="Musée X"
+bin/console app:interactif:import public/quiz/navinum.json       # enregistre/maj un interactif depuis son manifeste
 
 # Base de données
 bin/console doctrine:migrations:migrate
@@ -369,10 +369,28 @@ Types d'erreurs: `NetworkError`, `ValidationError`, `UnauthorizedError`, `NotFou
 - `POST /api/session/{id}/score` - Mettre à jour score
 - `POST /api/session/{id}/leave` - Quitter
 
-**Ajouter un nouveau thème:**
-1. Créer `public/quiz/questions/nouveau-theme.txt`
-2. Format: `Question|Réponse1|Réponse2|Réponse3|Réponse4|IndexCorrecte`
-3. Ajouter dans `public/quiz/themes.json`
+**Configuration (thèmes, questions, temps, joueurs) :** déclarée dans `public/quiz/navinum.json` (`configSchema`,
+valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interactifs → Configurer). Plus de fichiers `.txt`.
+
+### Interactifs configurables (spec `specs/005-interactifs-config`)
+
+**Principe :** l'interactif décrit lui-même ses réglages. Aucun formulaire spécifique par interactif dans Navinum.
+
+- `Interactif.variable` = **JSON Schema** (les `default` = config initiale). Outils : `App\Service\ConfigSchema`
+  (defaults, merge, validate).
+- `Exposition → Parcours → ParcoursInteractif (ordre, config JSON) → Interactif`. Config effective = défauts ⊕ config du parcours.
+- Admin : formulaire **généré** depuis le schéma (json-editor), validé aussi côté serveur.
+- Lancement : `<url>?nv=<jeton>` (`LaunchToken`, 12 h) → `GET /api/launch/{jeton}` (contexte + config),
+  `POST /api/launch/{jeton}/events` (→ `LogVisite`, base de la gamification). Côté JS : `await api.launch()`.
+- Temps réel (Mercure) : topic `/navinum/parcours-interactif/{id}/config` (config à chaud),
+  `/navinum/parcours/{id}/events` (fil en direct de l'admin).
+- Nouvel interactif = un manifeste `navinum.json` importé (admin → Interactifs → Importer, ou `app:interactif:import`).
+- Contrat complet : `specs/005-interactifs-config/contracts/launch-api.md`.
+
+### Rôles de l'admin
+
+- `ROLE_ADMIN` : tout. `ROLE_ORGANISATEUR` : expositions de son organisateur (éditeur ou diffuseur) et leurs parcours.
+- Comptes en base (`admin_user`) ; plus d'utilisateur en mémoire.
 
 ## Workflow de développement
 
@@ -417,8 +435,27 @@ Le hook vérifie automatiquement si la documentation a été mise à jour quand 
 ## URLs utiles
 
 - **Quiz:** http://localhost:8002/quiz/index.html
-- **Admin:** http://localhost:8002/admin (admin/admin)
+- **Admin:** http://localhost:8002/admin (compte créé avec `bin/console app:user:create`)
 - **API Platform:** http://localhost:8002/api (si configuré)
+
+## Environnements : même stack en local et sur le VPS
+
+**Règle : ce qui démarre en local doit démarrer sur le VPS, et inversement.**
+
+- Même Docker : **docker-ce officiel** (paquet apt) en local et sur le VPS. Pas le snap (AppArmor l'empêche d'arrêter
+  ses conteneurs et casse le réseau entre conteneurs).
+- Même `docker-compose.yaml` ; seules différences dans les overrides :
+  - local : `docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d` (`FRANKENPHP_WORKER_WATCH=watch`)
+  - VPS : `docker compose -f docker-compose.yaml -f docker-compose.prod.yml up -d` (Traefik, `APP_ENV=prod`, `APP_DEBUG=0`)
+- Un seul `Caddyfile` (worker FrankenPHP + Mercure + Vulcain), paramétré par variables d'environnement.
+- Mercure est intégré à FrankenPHP : plus de conteneur `mercure` ; `MERCURE_URL` interne = `http://localhost/.well-known/mercure`.
+- `MERCURE_PUBLIC_URL` = `/.well-known/mercure` (relatif, même domaine que le site, identique partout) ; l'API de lancement
+  le rend absolu pour les interactifs hébergés ailleurs.
+- `MERCURE_JWT_SECRET` : **32 caractères minimum** (sinon la publication échoue : « Key provided is shorter than 256 bits »).
+  Docker Compose lit les `${VAR}` dans le fichier **`.env`** du dossier (pas dans `.env.local`) : en prod, mettre le vrai
+  secret dans le `.env` du VPS, jamais dans le dépôt.
+- Worker FrankenPHP : l'application reste en mémoire entre les requêtes → services sans état, pas de données
+  propres à une requête dans des propriétés de service.
 
 ## Troubleshooting
 
@@ -466,7 +503,12 @@ curl -X POST http://localhost:8002/api/session/create \
   - Intégration dans le Quiz multi-joueur
   - Git hooks et templates JSDoc
 
-- 004-admin-parcours: Administration des Parcours avec Sylius Bundle intégré
+- 2026-11-21: 005-interactifs-config
+  - Admin reconstruite en Symfony pur (Sylius retiré en janvier 2026), comptes en base + rôles admin/organisateur
+  - Interactifs configurables par parcours (JSON Schema dans `variable`, `ParcoursInteractif`, formulaire générique)
+  - API de lancement `/api/launch/{jeton}` + événements → LogVisite ; quiz branché (lib navinum-api 0.2+)
+  - FrankenPHP : mode worker, Mercure intégré, Vulcain ; Caddyfile unique dev/prod
+- 004-admin-parcours: Administration des Parcours avec Sylius (abandonné, remplacé par 005)
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

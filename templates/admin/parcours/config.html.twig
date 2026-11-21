@@ -1,0 +1,100 @@
+{% extends 'admin/layout.html.twig' %}
+{% set parcours = placement.parcours %}
+{% set interactif = placement.interactif %}
+{% block title %}Configurer {{ interactif.libelle }}{% endblock %}
+{% block body %}
+<nav aria-label="Fil d'Ariane"><ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ path('admin_parcours_index') }}">Parcours</a></li>
+    <li class="breadcrumb-item"><a href="{{ path('admin_parcours_show', {id: parcours.id}) }}">{{ parcours.libelle }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ interactif.libelle }}</li>
+</ol></nav>
+<h1 class="h3">{{ interactif.libelle }} <span class="text-secondary fs-6">dans « {{ parcours.libelle }} »</span></h1>
+<p class="text-secondary">
+    {% if schema %}Ce formulaire est généré à partir des réglages que l'interactif déclare. Les valeurs non modifiées restent celles par défaut.
+    {% else %}Cet interactif ne déclare pas de JSON Schema : la configuration se saisit directement en JSON.{% endif %}
+</p>
+
+{% if errors is not empty %}
+<div class="alert alert-danger"><strong>La configuration n'est pas valide :</strong>
+    <ul class="mb-0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post" id="config-form">
+    <input type="hidden" name="_token" value="{{ csrf_token('config' ~ placement.id) }}">
+    {% if schema %}
+        <div class="card mb-3"><div class="card-body"><div id="config-editor"></div></div></div>
+        <details class="mb-3">
+            <summary class="text-secondary small">Voir / modifier en JSON</summary>
+            <textarea class="form-control font-monospace mt-2" name="config" id="config-json" rows="14" spellcheck="false">{{ config }}</textarea>
+            <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="apply-json">Appliquer le JSON au formulaire</button>
+        </details>
+    {% else %}
+        <textarea class="form-control font-monospace mb-3" name="config" id="config-json" rows="18" spellcheck="false">{{ config }}</textarea>
+    {% endif %}
+    <div class="d-flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Enregistrer</button>
+        <a class="btn btn-outline-secondary" href="{{ path('admin_parcours_show', {id: parcours.id}) }}">Annuler</a>
+        <button class="btn btn-outline-warning ms-auto" type="submit" name="reset" value="1" formnovalidate onclick="return confirm('Revenir aux valeurs par défaut de l\'interactif ?');">Réinitialiser</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block javascripts %}
+{% if schema %}
+<script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@2.15.1/dist/jsoneditor.min.js"></script>
+<script>
+(() => {
+    JSONEditor.defaults.languages.fr = {
+        error_notset: 'Ce champ est obligatoire', error_notempty: 'Valeur obligatoire', error_enum: 'Valeur non autorisée',
+        error_type: 'Type attendu : {{ '{{0}}' }}', error_minLength: 'Au moins {{ '{{0}}' }} caractère(s)', error_maxLength: 'Au plus {{ '{{0}}' }} caractère(s)',
+        error_minimum_incl: 'Doit être ≥ {{ '{{0}}' }}', error_maximum_incl: 'Doit être ≤ {{ '{{0}}' }}',
+        error_minItems: 'Au moins {{ '{{0}}' }} élément(s)', error_maxItems: 'Au plus {{ '{{0}}' }} élément(s)', error_pattern: 'Format invalide',
+        button_collapse: 'Replier', button_expand: 'Déplier', button_add_row_title: 'Ajouter : {{ '{{0}}' }}',
+        button_delete_row_title: 'Supprimer : {{ '{{0}}' }}', button_delete_row_title_short: 'Supprimer',
+        button_move_up_title: 'Monter', button_move_down_title: 'Descendre',
+        button_delete_all_title: 'Tout supprimer', button_delete_last_title: 'Supprimer le dernier {{ '{{0}}' }}',
+        button_copy_row_title_short: 'Dupliquer', button_copy_row_title: 'Dupliquer {{ '{{0}}' }}',
+        button_save: 'Enregistrer', button_cancel: 'Annuler', button_add: 'Ajouter', button_delete: 'Supprimer',
+        delete_confirm: 'Supprimer cet élément ?',
+    };
+    JSONEditor.defaults.language = 'fr';
+
+    const schema = {{ schema|json_encode|raw }};
+    const textarea = document.getElementById('config-json');
+    let startval;
+    try { startval = JSON.parse(textarea.value); } catch (e) { startval = undefined; }
+
+    const editor = new JSONEditor(document.getElementById('config-editor'), {
+        schema,
+        startval,
+        theme: 'bootstrap5',
+        disable_properties: true,
+        disable_edit_json: true,
+        prompt_before_delete: true,
+        show_errors: 'interaction',
+        array_controls_top: false,
+    });
+    const sync = () => { textarea.value = JSON.stringify(editor.getValue(), null, 2); };
+    editor.on('change', sync);
+
+    document.getElementById('apply-json').addEventListener('click', () => {
+        try { editor.setValue(JSON.parse(textarea.value)); }
+        catch (e) { alert('JSON invalide : ' + e.message); }
+    });
+
+    document.getElementById('config-form').addEventListener('submit', (event) => {
+        if (event.submitter && event.submitter.name === 'reset') return;
+        sync();
+        const errors = editor.validate();
+        if (errors.length) {
+            event.preventDefault();
+            editor.options.show_errors = 'always';
+            editor.onChange();
+            alert('Certains champs ne sont pas valides (' + errors.length + ').');
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

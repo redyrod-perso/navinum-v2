@@ -1,110 +1,116 @@
-{% extends '@SyliusUi/layout/centered.html.twig' %}
+{% extends 'admin/layout.html.twig' %}
+{% block title %}{{ parcours.libelle }}{% endblock %}
+{% block body %}
+{% set token = csrf_token('placement' ~ parcours.id) %}
+<nav aria-label="Fil d'Ariane"><ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ path('admin_parcours_index') }}">Parcours</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ parcours.libelle }}</li>
+</ol></nav>
 
-{% block content %}
-  <div class="ui container">
-    <div class="ui clearing segment">
-      <h2 class="ui left floated header">{{ parcours.libelle }}</h2>
-      <div class="ui right floated buttons">
-        <a class="ui button" href="{{ path('admin_parcours_edit', {id: parcours.id}) }}">
-          <i class="edit icon"></i> Modifier
-        </a>
-        <a class="ui button" href="{{ path('admin_parcours_index') }}">
-          <i class="list icon"></i> Retour à la liste
-        </a>
-      </div>
+<div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <div class="me-auto">
+        <h1 class="h3 mb-1">{{ parcours.libelle }}</h1>
+        <div class="text-secondary small">
+            {% for e in parcours.expositions %}<span class="badge text-bg-secondary">{{ e.libelle }}</span> {% else %}Rattaché à aucune exposition{% endfor %}
+        </div>
     </div>
+    <a class="btn btn-outline-secondary" href="{{ path('admin_parcours_edit', {id: parcours.id}) }}"><i class="bi bi-pencil"></i> Modifier le parcours</a>
+</div>
 
-    <div class="ui two column stackable grid">
-      <div class="column">
-        <h3 class="ui header">Informations Générales</h3>
-        <table class="ui definition table">
-          <tbody>
-            <tr>
-              <td>Libellé</td>
-              <td>{{ parcours.libelle }}</td>
-            </tr>
-            <tr>
-              <td>Ordre</td>
-              <td>{{ parcours.ordre ?? 'Non défini' }}</td>
-            </tr>
-            <tr>
-              <td>À synchroniser</td>
-              <td>
-                {% if parcours.isTosync %}
-                  <i class="green check icon"></i> Oui
-                {% else %}
-                  <i class="red times icon"></i> Non
-                {% endif %}
-              </td>
-            </tr>
-            <tr>
-              <td>Créé le</td>
-              <td>{{ parcours.createdAt|date('d/m/Y à H:i') }}</td>
-            </tr>
-            <tr>
-              <td>Modifié le</td>
-              <td>{{ parcours.updatedAt|date('d/m/Y à H:i') }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="column">
-        <h3 class="ui header">Relations</h3>
-
-        <h4 class="ui header">
-          <i class="image icon"></i>
-          <div class="content">
-            Expositions
-            <div class="sub header">{{ parcours.expositions|length }} exposition(s)</div>
-          </div>
-        </h4>
-        {% if parcours.expositions is not empty %}
-          <div class="ui list">
-            {% for exposition in parcours.expositions %}
-              <div class="item">
-                <i class="image icon"></i>
-                <div class="content">{{ exposition.libelle }}</div>
-              </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <p class="ui grey text">Aucune exposition associée</p>
-        {% endif %}
-
-        <div class="ui divider"></div>
-
-        <h4 class="ui header">
-          <i class="tv icon"></i>
-          <div class="content">
-            Interactifs
-            <div class="sub header">{{ parcours.interactifs|length }} interactif(s)</div>
-          </div>
-        </h4>
-        {% if parcours.interactifs is not empty %}
-          <div class="ui list">
-            {% for interactif in parcours.interactifs %}
-              <div class="item">
-                <i class="tv icon"></i>
-                <div class="content">{{ interactif.libelle }}</div>
-              </div>
-            {% endfor %}
-          </div>
-        {% else %}
-          <p class="ui grey text">Aucun interactif associé</p>
-        {% endif %}
-      </div>
+<div class="card mb-4">
+    <div class="card-header bg-white fw-semibold">Interactifs du parcours</div>
+    <ul class="list-group list-group-flush">
+    {% for pi in parcours.parcoursInteractifs %}
+        {% set i = pi.interactif %}
+        <li class="list-group-item d-flex flex-wrap align-items-center gap-2">
+            <div class="btn-group-vertical btn-group-sm">
+                {% for dir in ['up', 'down'] %}
+                <form method="post" action="{{ path('admin_parcours_move', {id: parcours.id, placement: pi.id, direction: dir}) }}">
+                    <input type="hidden" name="_token" value="{{ token }}">
+                    <button class="btn btn-link btn-sm p-0 text-secondary" {{ (dir == 'up' and loop.parent.loop.first) or (dir == 'down' and loop.parent.loop.last) ? 'disabled' }} title="{{ dir == 'up' ? 'Monter' : 'Descendre' }}"><i class="bi bi-chevron-{{ dir }}"></i></button>
+                </form>
+                {% endfor %}
+            </div>
+            <span class="badge rounded-pill text-bg-light border">{{ loop.index }}</span>
+            <div class="me-auto">
+                <div class="fw-semibold">{{ i.libelle }} {% if i.version %}<span class="text-secondary small">v{{ i.version }}</span>{% endif %}</div>
+                <div class="small">
+                    {% if not i.configurable %}
+                        <span class="text-secondary">Aucun réglage déclaré</span>
+                    {% elseif pi.config is null %}
+                        <span class="text-secondary"><i class="bi bi-sliders"></i> Configuration par défaut</span>
+                    {% else %}
+                        <span class="text-success"><i class="bi bi-sliders"></i> Configuration personnalisée</span>
+                    {% endif %}
+                </div>
+            </div>
+            <a class="btn btn-sm btn-outline-primary" href="{{ path('admin_parcours_config', {id: parcours.id, placement: pi.id}) }}"><i class="bi bi-sliders"></i> Configurer</a>
+            {% if i.urlFichierInteractif %}
+            <form method="post" action="{{ path('admin_parcours_launch', {id: parcours.id, placement: pi.id}) }}" target="_blank">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <button class="btn btn-sm btn-outline-success" title="Lancer comme un visiteur anonyme"><i class="bi bi-play-fill"></i> Tester</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ path('admin_parcours_remove_interactif', {id: parcours.id, placement: pi.id}) }}" onsubmit="return confirm('Retirer cet interactif du parcours ? Sa configuration sera perdue.');">
+                <input type="hidden" name="_token" value="{{ token }}">
+                <button class="btn btn-sm btn-outline-danger" title="Retirer du parcours"><i class="bi bi-x-lg"></i></button>
+            </form>
+        </li>
+    {% else %}
+        <li class="list-group-item text-secondary py-4 text-center">Aucun interactif dans ce parcours pour l'instant.</li>
+    {% endfor %}
+    </ul>
+    <div class="card-footer bg-white">
+        <form class="row g-2 align-items-center" method="post" action="{{ path('admin_parcours_add_interactif', {id: parcours.id}) }}">
+            <input type="hidden" name="_token" value="{{ token }}">
+            <div class="col-auto"><label class="col-form-label" for="add-interactif">Ajouter</label></div>
+            <div class="col-12 col-md-5">
+                <select class="form-select" id="add-interactif" name="interactif" required>
+                    <option value="">Choisir un interactif du catalogue…</option>
+                    {% for i in catalogue %}<option value="{{ i.id }}">{{ i.libelle }}{{ i.version ? ' (v' ~ i.version ~ ')' }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-auto"><button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg"></i> Ajouter</button></div>
+        </form>
     </div>
+</div>
 
-    <div class="ui segment">
-      <h3 class="ui header">Actions</h3>
-      <form method="post" action="{{ path('admin_parcours_delete', {id: parcours.id}) }}" style="display: inline;"
-            onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce parcours ?');">
-        <input type="hidden" name="_token" value="{{ csrf_token('delete' ~ parcours.id) }}">
-        <button type="submit" class="ui red button">
-          <i class="trash icon"></i> Supprimer
-        </button>
-      </form>
+<div class="card">
+    <div class="card-header bg-white fw-semibold d-flex align-items-center">
+        <span class="me-auto"><i class="bi bi-broadcast"></i> En direct</span>
+        <span class="badge text-bg-secondary" id="live-status">connexion…</span>
     </div>
-  </div>
+    <ul class="list-group list-group-flush small" id="live-events">
+        <li class="list-group-item text-secondary" id="live-empty">Les événements des interactifs lancés dans ce parcours s'affichent ici en temps réel.</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block javascripts %}
+<script>
+(() => {
+    // Hub Mercure intégré à FrankenPHP
+    const url = {{ mercure(events_topic)|json_encode|raw }};
+    const list = document.getElementById('live-events');
+    const status = document.getElementById('live-status');
+    const source = new EventSource(url);
+    source.onopen = () => { status.textContent = 'connecté'; status.className = 'badge text-bg-success'; };
+    source.onerror = () => { status.textContent = 'déconnecté'; status.className = 'badge text-bg-warning'; };
+    source.onmessage = ({ data }) => {
+        const e = JSON.parse(data);
+        document.getElementById('live-empty')?.remove();
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex gap-2';
+        const time = new Date(e.at).toLocaleTimeString('fr-FR');
+        li.append(
+            Object.assign(document.createElement('span'), { className: 'text-secondary', textContent: time }),
+            Object.assign(document.createElement('strong'), { textContent: e.interactif }),
+            Object.assign(document.createElement('code'), { textContent: e.type }),
+            Object.assign(document.createElement('span'), { className: 'ms-auto text-secondary', textContent: (e.score !== null ? 'score ' + e.score + ' · ' : '') + 'session ' + e.session }),
+        );
+        list.prepend(li);
+        while (list.children.length > 50) list.lastElementChild.remove();
+    };
+})();
+</script>
 {% endblock %}

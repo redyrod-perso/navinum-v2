@@ -1,12 +1,44 @@
-{% extends '@SyliusUi/layout/centered.html.twig' %}
-
-{% block content %}
-  <div class="ui container">
-    <h1 class="ui header">Navinum Admin</h1>
-    <div class="ui list">
-      <a class="item" href="{{ path('admin_exposition_index') }}">Expositions</a>
-      <a class="item" href="{{ path('admin_interactif_index') }}">Interactifs</a>
-      <a class="item" href="{{ path('admin_admin_parcours_index') }}">Parcours</a>
+{% extends 'admin/layout.html.twig' %}
+{% block title %}Tableau de bord{% endblock %}
+{% block body %}
+<h1 class="h3 mb-4">Bonjour {{ app.user }}</h1>
+{% set cards = {
+    expositions: ['Expositions', 'bi-building', 'admin_exposition_index'],
+    parcours: ['Parcours', 'bi-signpost-split', 'admin_parcours_index'],
+    interactifs: ['Interactifs', 'bi-joystick', 'admin_interactif_index'],
+    visiteurs: ['Visiteurs', 'bi-people', 'admin_visiteur_index'],
+    visites: ['Sessions d\'interactifs', 'bi-activity', null],
+} %}
+<div class="row g-3 mb-4">
+{% for key, value in stats %}
+    {% set c = cards[key] %}
+    <div class="col-6 col-md-4 col-xl">
+        <div class="card h-100"><div class="card-body">
+            <div class="text-secondary small"><i class="bi {{ c[1] }}"></i> {{ c[0] }}</div>
+            <div class="fs-2 fw-semibold">{{ value }}</div>
+            {% if c[2] %}<a class="stretched-link" href="{{ path(c[2]) }}" aria-label="{{ c[0] }}"></a>{% endif %}
+        </div></div>
     </div>
-  </div>
+{% endfor %}
+</div>
+
+{% if recent is not empty %}
+<div class="card">
+    <div class="card-header bg-white fw-semibold">Dernières sessions d'interactifs</div>
+    <div class="table-responsive"><table class="table mb-0">
+        <thead class="table-light"><tr><th>Interactif</th><th>Exposition</th><th>Début</th><th>Fin</th><th>Score</th></tr></thead>
+        <tbody>
+        {% for log in recent %}
+            <tr>
+                <td>{{ log.interactifLibelle ?? '—' }}</td>
+                <td>{{ log.exposition ? log.exposition.libelle : '—' }}</td>
+                <td>{{ log.startAt|date('d/m/Y H:i') }}</td>
+                <td>{{ log.endAt ? log.endAt|date('H:i') : '—' }}</td>
+                <td>{{ log.score ?? '—' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+</div>
+{% endif %}
 {% endblock %}

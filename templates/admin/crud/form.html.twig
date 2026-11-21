@@ -1,0 +1,18 @@
+{% extends 'admin/layout.html.twig' %}
+{% block title %}{{ entity ? 'Modifier' : 'Ajouter' }} · {{ crud.label }}{% endblock %}
+{% block body %}
+<nav aria-label="Fil d'Ariane"><ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ path(crud.route ~ 'index') }}">{{ crud.labelPlural }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ entity ? 'Modifier' : 'Ajouter' }}</li>
+</ol></nav>
+<h1 class="h3 mb-3">{{ entity ? (entity.libelle ?? entity.email ?? entity.nom ?? 'Modifier') : 'Nouveau : ' ~ crud.label|lower }}</h1>
+<div class="card"><div class="card-body">
+    {{ form_start(form) }}
+        {{ form_widget(form) }}
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Enregistrer</button>
+            <a class="btn btn-outline-secondary" href="{{ path(crud.route ~ 'index') }}">Annuler</a>
+        </div>
+    {{ form_end(form) }}
+</div></div>
+{% endblock %}

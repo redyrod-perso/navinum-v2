@@ -25,24 +25,52 @@ Le backend ne gère **que les sessions**, toute la logique du quiz est côté cl
 ### Frontend (React)
 
 **Fichier principal** : `public/quiz/app.jsx`
-- Chargement des thèmes et questions
+- Chargement de la configuration (jeton Navinum `?nv=` ou valeurs par défaut du manifeste)
+- Compte à rebours par question, nombre de questions et de joueurs configurables
 - Gestion du jeu (questions, réponses, scores)
 - Polling pour synchronisation multi-joueurs
 - Interface utilisateur complète
 
-### Données statiques
+### Manifeste et configuration
 
 ```
 public/quiz/
-├── themes.json              # Liste des thèmes disponibles
-├── questions/
-│   ├── histoire.txt        # Questions d'histoire
-│   ├── sciences.txt        # Questions de sciences
-│   └── geographie.txt      # Questions de géographie
+├── navinum.json            # Manifeste : libellé, version, événements, configSchema (avec thèmes par défaut)
 ├── app.jsx                 # Application React
 ├── index.html              # Point d'entrée
+├── test-api.html           # Page de test des API
 └── README.md               # Ce fichier
 ```
+
+Le quiz déclare ses paramètres dans `navinum.json` (`configSchema`, JSON Schema draft-07) :
+
+| Propriété | Type | Défaut | Rôle |
+|-----------|------|--------|------|
+| `tempsParQuestion` | entier (s) | 20 | Temps pour répondre ; 0 = illimité. Temps écoulé = réponse fausse |
+| `nbQuestions` | entier | 10 | Nombre de questions posées (les premières du thème) |
+| `joueursMax` | entier | 8 | Nombre maximum de joueurs par groupe |
+| `themes` | tableau | 3 thèmes | `{ id, libelle, questions: [{ question, reponses: [4 chaînes], correcte: 0-3 }] }` |
+
+**Source de la configuration au démarrage :**
+
+- **Lancé par Navinum** (`/quiz/index.html?nv=<token>`) : `api.launch()` récupère `ctx.config`
+  (configuration du parcours, fusionnée côté serveur sur les défauts), fusionnée à nouveau
+  sur les défauts du manifeste par sécurité. Le pseudo du visiteur est pré-rempli s'il est connu.
+- **Mode autonome / dev** (sans `?nv=`) : le quiz charge `/quiz/navinum.json` et utilise les
+  valeurs `default` du `configSchema`.
+- **Mise à jour en direct** (avec `?nv=` et `ctx.mercure` non null) : le quiz s'abonne via
+  `ctx.onConfigChange()`. Une configuration enregistrée dans l'admin est nettoyée, fusionnée sur
+  les défauts du manifeste et appliquée **aux prochaines parties uniquement** (jamais pendant une
+  partie en cours) ; un message discret « Configuration mise à jour » s'affiche sur l'accueil / le lobby.
+
+### Événements émis (uniquement avec un jeton `?nv=`)
+
+Envoyés via `ctx.track(type, payload)` (`POST /api/launch/{token}/events`) :
+
+- `quiz.started` : `{ theme, nbQuestions, tempsParQuestion, joueurs, groupe }`
+- `quiz.answered` : `{ theme, questionIndex, reponse, correcte, tempsReponse }`
+- `quiz.completed` : `{ theme, score, total, gagnant, victoire, joueurs, duree }`
+- `quiz.abandoned` : `{ theme, score, questionIndex, total }`
 
 ## 🚀 Démarrage
 
@@ -215,31 +243,29 @@ Le système utilise un **polling** toutes les secondes pour synchroniser les ét
 
 ## 📝 Format des questions
 
-Les questions sont stockées dans des fichiers `.txt` avec le format suivant :
+Les thèmes et questions font partie de la configuration (`themes`) :
 
-```
-Question|Réponse1|Réponse2|Réponse3|Réponse4|IndexCorrect
+```json
+{
+  "id": "histoire",
+  "libelle": "Histoire",
+  "questions": [
+    {
+      "question": "En quelle année a eu lieu la Révolution française ?",
+      "reponses": ["1789", "1792", "1804", "1815"],
+      "correcte": 0
+    }
+  ]
+}
 ```
 
-**Exemple** (`questions/histoire.txt`):
-```
-En quelle année a eu lieu la Révolution française ?|1789|1792|1804|1815|0
-Qui était le premier empereur romain ?|Jules César|Auguste|Néron|Caligula|1
-```
+`correcte` est l'index (0 à 3) de la bonne réponse dans `reponses`.
 
 ## ➕ Ajouter un nouveau thème
 
-1. Créer le fichier de questions :
-```bash
-touch public/quiz/questions/mon-theme.txt
-```
-
-2. Ajouter les questions au format spécifié
-
-3. Référencer le thème dans `themes.json` :
-```json
-["histoire", "sciences", "geographie", "mon-theme"]
-```
+- **Pour un parcours** : modifier la configuration de l'interactif dans l'administration du parcours.
+- **Par défaut (tous les parcours et mode autonome)** : ajouter le thème dans
+  `configSchema.properties.themes.default` de `public/quiz/navinum.json`.
 
 ## 🧹 Commandes utiles
 
@@ -312,11 +338,11 @@ mkdir -p var/cache/sessions
 2. Vérifier que la session est en statut "lobby"
 3. Consulter la console navigateur (F12)
 
-### Erreur 404 sur les questions
+### Aucun thème / configuration introuvable
 
-1. Vérifier que le fichier existe dans `public/quiz/questions/`
-2. Vérifier les permissions : `chmod 644 public/quiz/questions/*.txt`
-3. Vérifier que le thème est bien dans `themes.json`
+1. Vérifier que `/quiz/navinum.json` est accessible et valide (`python3 -m json.tool public/quiz/navinum.json`)
+2. Avec `?nv=` : « Ce lien a expiré » = jeton expiré (410), « Lien de lancement invalide » = jeton inconnu (404)
+3. Un thème sans question valide (4 réponses, `correcte` entre 0 et 3) est ignoré
 
 ## 📂 Structure du projet
 
@@ -329,11 +355,7 @@ mkdir -p var/cache/sessions
 │   └── quiz/
 │       ├── index.html               # Point d'entrée
 │       ├── app.jsx                  # Application React
-│       ├── themes.json              # Liste des thèmes
-│       ├── questions/               # Fichiers de questions
-│       │   ├── histoire.txt
-│       │   ├── sciences.txt
-│       │   └── geographie.txt
+│       ├── navinum.json             # Manifeste + configSchema (thèmes par défaut)
 │       └── README.md                # Documentation
 ├── var/
 │   └── cache/

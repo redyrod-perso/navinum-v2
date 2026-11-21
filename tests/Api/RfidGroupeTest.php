@@ -7,6 +7,13 @@ use App\Entity\RfidGroupe;
 
 class RfidGroupeTest extends ApiTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Repartir d'une table vide : les noms de groupe sont uniques
+        static::getContainer()->get('doctrine')->getManager()->getConnection()
+            ->executeStatement('TRUNCATE TABLE rfid_groupe CASCADE');
+    }
 
     public function testGetCollection(): void
     {
@@ -29,9 +36,9 @@ class RfidGroupeTest extends ApiTestCase
 
         $data = $response->toArray();
 
-        $this->assertArrayHasKey('hydra:member', $data);
-        $this->assertCount(1, $data['hydra:member']);
-        $this->assertEquals('Test Groupe API', $data['hydra:member'][0]['nom']);
+        $this->assertArrayHasKey('member', $data);
+        $this->assertCount(1, $data['member']);
+        $this->assertEquals('Test Groupe API', $data['member'][0]['nom']);
     }
 
     public function testCreateGroupe(): void
@@ -39,6 +46,7 @@ class RfidGroupeTest extends ApiTestCase
         $client = static::createClient();
 
         $response = $client->request('POST', '/api/rfid_groupes', [
+            'headers' => ['Content-Type' => 'application/ld+json'],
             'json' => [
                 'nom' => 'Nouveau Groupe Test'
             ]

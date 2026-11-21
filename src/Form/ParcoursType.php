@@ -3,7 +3,8 @@
 namespace App\Form;
 
 use App\Entity\Exposition;
-use App\Entity\Interactif;
+use App\Entity\Organisateur;
+use Doctrine\ORM\EntityRepository;
 use App\Entity\Parcours;
 use Symfony\Bridge\Doctrine\Form\Type\EntityType;
 use Symfony\Component\Form\AbstractType;
@@ -47,6 +48,16 @@ class ParcoursType extends AbstractType
             ])
             ->add('expositions', EntityType::class, [
                 'class' => Exposition::class,
+                // Un organisateur ne voit que ses expositions
+                'query_builder' => static function (EntityRepository $repo) use ($options) {
+                    $qb = $repo->createQueryBuilder('x')->orderBy('x.libelle', 'ASC');
+                    if ($org = $options['organisateur']) {
+                        $qb->andWhere('x.organisateurEditeur = :org OR x.organisateurDiffuseur = :org')
+                            ->setParameter('org', $org->getId(), 'uuid');
+                    }
+
+                    return $qb;
+                },
                 'choice_label' => 'libelle',
                 'multiple' => true,
                 'expanded' => false,
@@ -59,20 +70,6 @@ class ParcoursType extends AbstractType
                 'by_reference' => false,
                 'help' => 'Sélectionnez les expositions où ce parcours sera proposé'
             ])
-            ->add('interactifs', EntityType::class, [
-                'class' => Interactif::class,
-                'choice_label' => 'libelle',
-                'multiple' => true,
-                'expanded' => false,
-                'label' => 'Interactifs',
-                'required' => false,
-                'attr' => [
-                    'class' => 'form-control select2',
-                    'data-placeholder' => 'Sélectionner des interactifs'
-                ],
-                'by_reference' => false,
-                'help' => 'Choisissez les contenus interactifs inclus dans ce parcours'
-            ])
             ->add('is_tosync', CheckboxType::class, [
                 'label' => 'À synchroniser avec Navinum V1',
                 'required' => false,
@@ -84,8 +81,10 @@ class ParcoursType extends AbstractType
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
-            'data_class' => Parcours::class
+            'data_class' => Parcours::class,
+            'organisateur' => null,
         ]);
+        $resolver->setAllowedTypes('organisateur', ['null', Organisateur::class]);
     }
 
     public function getBlockPrefix(): string

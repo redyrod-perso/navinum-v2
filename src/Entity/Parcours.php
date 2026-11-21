@@ -30,17 +30,16 @@ class Parcours
     #[ORM\InverseJoinColumn(name: 'exposition_id', referencedColumnName: 'id')]
     private Collection $expositions;
 
-    #[ORM\ManyToMany(targetEntity: Interactif::class, inversedBy: 'parcours')]
-    #[ORM\JoinTable(name: 'parcours_interactif')]
-    #[ORM\JoinColumn(name: 'parcours_id', referencedColumnName: 'id')]
-    #[ORM\InverseJoinColumn(name: 'interactif_id', referencedColumnName: 'id')]
-    private Collection $interactifs;
+    /** @var Collection<int, ParcoursInteractif> */
+    #[ORM\OneToMany(targetEntity: ParcoursInteractif::class, mappedBy: 'parcours', cascade: ['persist', 'remove'], orphanRemoval: true)]
+    #[ORM\OrderBy(['ordre' => 'ASC'])]
+    private Collection $parcoursInteractifs;
 
     public function __construct()
     {
         $this->initializeEntity();
         $this->expositions = new ArrayCollection();
-        $this->interactifs = new ArrayCollection();
+        $this->parcoursInteractifs = new ArrayCollection();
     }
 
     public function getLibelle(): string
@@ -101,26 +100,43 @@ class Parcours
     }
 
     /**
-     * @return Collection<int, Interactif>
+     * Interactifs du parcours, triés par ordre, avec leur configuration.
+     *
+     * @return Collection<int, ParcoursInteractif>
      */
-    public function getInteractifs(): Collection
+    public function getParcoursInteractifs(): Collection
     {
-        return $this->interactifs;
+        return $this->parcoursInteractifs;
     }
 
-    public function addInteractif(Interactif $interactif): self
+    /** Ajoute un interactif en fin de parcours et renvoie le placement créé. */
+    public function addInteractif(Interactif $interactif, ?array $config = null): ParcoursInteractif
     {
-        if (!$this->interactifs->contains($interactif)) {
-            $this->interactifs->add($interactif);
+        $max = -1;
+        foreach ($this->parcoursInteractifs as $pi) {
+            $max = max($max, $pi->getOrdre());
         }
+        $placement = (new ParcoursInteractif($this, $interactif))
+            ->setOrdre($max + 1)
+            ->setConfig($config);
+        $this->parcoursInteractifs->add($placement);
+
+        return $placement;
+    }
+
+    public function removeParcoursInteractif(ParcoursInteractif $placement): self
+    {
+        $this->parcoursInteractifs->removeElement($placement);
 
         return $this;
     }
 
-    public function removeInteractif(Interactif $interactif): self
+    /** @return list<Interactif> */
+    public function getInteractifs(): array
     {
-        $this->interactifs->removeElement($interactif);
-
-        return $this;
+        return array_values(array_map(
+            static fn (ParcoursInteractif $pi) => $pi->getInteractif(),
+            $this->parcoursInteractifs->toArray(),
+        ));
     }
 }

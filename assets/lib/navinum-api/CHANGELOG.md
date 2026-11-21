@@ -7,6 +7,34 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.3.0] - 2026-11-21
+
+### Added
+- `ctx.mercure` dans le contexte de `api.launch()` : `{ hub, topics: { config } }` ou `null` (aperçu hors parcours).
+- `ctx.onConfigChange(callback)` : écoute Mercure (`EventSource` sur `hub?topic=<topics.config>`) et appelle
+  `callback(config)` à chaque enregistrement de la configuration dans l'admin. Retourne une fonction de
+  désabonnement ; no-op (fonction vide) si `ctx.mercure` est null ou si `EventSource` est indisponible.
+- `LaunchAPI.subscribeConfig(mercure, callback, options)` : variante bas niveau.
+
+---
+
+## [0.2.0] - 2026-11-21
+
+### Added
+- `api.launch(token?)` : récupère le contexte de lancement d'un interactif via le jeton `?nv=`
+  (`GET /api/launch/{token}`). Retourne `{ token, interactif, parcours, exposition, config, visiteur, expiresAt, track(type, payload) }`,
+  ou `null` si aucun jeton n'est présent dans l'URL (mode autonome).
+- `ctx.track(type, payload)` : envoi d'un événement d'interactif (`POST /api/launch/{token}/events`).
+- `LaunchAPI` (`api.launches`) : `get(token)`, `sendEvent(token, type, payload)`, `resolve(token)`,
+  `LaunchAPI.getTokenFromUrl(search)`.
+- `NavinumAPI.getLaunchToken(search?)` et `NavinumAPI.LAUNCH_TOKEN_PARAM` (`'nv'`).
+- `GoneError` (HTTP 410), levée notamment pour un jeton de lancement expiré.
+
+### Changed
+- `ApiClient.handleError()` traduit désormais le statut 410 en `GoneError` (auparavant `NavinumAPIError` générique).
+
+---
+
 ## [0.1.0] - 2025-01-17
 
 ### Added

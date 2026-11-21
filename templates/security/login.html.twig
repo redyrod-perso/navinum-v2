@@ -1,23 +1,27 @@
-{% extends '@SyliusUi/layout/centered.html.twig' %}
-
-{% block content %}
-  <div class="ui container">
-    <h2 class="ui header">Connexion</h2>
-    {% if error %}
-      <div class="ui red message">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
-    {% endif %}
-    <form method="post" class="ui form" action="{{ path('app_login') }}">
-      <div class="field">
-        <label for="username">Utilisateur</label>
-        <input type="text" id="username" name="_username" value="{{ last_username }}" required autofocus>
-      </div>
-      <div class="field">
-        <label for="password">Mot de passe</label>
-        <input type="password" id="password" name="_password" required>
-      </div>
-      <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
-      <button class="ui primary button" type="submit">Se connecter</button>
-    </form>
-  </div>
+{% extends 'admin/layout.html.twig' %}
+{% block title %}Connexion{% endblock %}
+{% block navigation %}{% endblock %}
+{% block body %}
+<div class="row justify-content-center" style="margin-top: 12vh">
+    <div class="col-12 col-sm-8 col-md-5 col-lg-4">
+        <div class="text-center mb-4"><i class="bi bi-compass fs-1"></i><h1 class="h4">Navinum · Administration</h1></div>
+        <div class="card"><div class="card-body p-4">
+            {% if error %}
+                <div class="alert alert-danger">{{ error.messageKey|trans(error.messageData, 'security') }}</div>
+            {% endif %}
+            <form method="post" action="{{ path('app_login') }}">
+                <div class="mb-3">
+                    <label class="form-label" for="username">Email</label>
+                    <input class="form-control" type="email" id="username" name="_username" value="{{ last_username }}" autocomplete="username" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="password">Mot de passe</label>
+                    <input class="form-control" type="password" id="password" name="_password" autocomplete="current-password" required>
+                </div>
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                <button class="btn btn-primary w-100" type="submit">Se connecter</button>
+            </form>
+        </div></div>
+    </div>
+</div>
 {% endblock %}
-
