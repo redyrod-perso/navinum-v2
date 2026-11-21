@@ -45,6 +45,7 @@ Corps : `{ "type": "quiz.completed", "payload": { "score": 8 } }` → `{ "accept
 | Topic | Contenu | Abonnés |
 |---|---|---|
 | `/navinum/parcours-interactif/{id}/config` | `{ "config": { … } }` à chaque enregistrement | l'interactif lancé (`ctx.onConfigChange`) |
+| `/navinum/sessions/{id}` | `{ "type": "session", "session": { … } }` à chaque changement (lobby, démarrage, scores) | joueurs du quiz multijoueur |
 | `/navinum/parcours/{id}/events` | `{ interactif, placement, type, score, session, at }` (sans identité visiteur) | page du parcours dans l'admin |
 
 ## 4. Côté interactif (librairie `@navinum/api`)

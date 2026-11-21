@@ -25,6 +25,11 @@
 	# Vulcain : préchargement des ressources liées de l'API (Preload / Fields)
 	vulcain
 
+	# Interactifs et librairie JS : le navigateur revalide à chaque chargement (ETag),
+	# sinon il garde une ancienne version après un déploiement.
+	@interactifs path /quiz/* /build/* /config.js
+	header @interactifs Cache-Control "no-cache"
+
 	# Mode worker : l'application Symfony reste chargée en mémoire entre les requêtes
 	php_server {
 		worker {

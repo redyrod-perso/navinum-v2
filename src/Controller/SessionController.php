@@ -2,16 +2,36 @@
 
 namespace App\Controller;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\Mercure\HubInterface;
+use Symfony\Component\Mercure\Update;
 use Symfony\Component\Routing\Annotation\Route;
 
+/**
+ * Sessions de quiz multijoueur.
+ *
+ * Temps réel : chaque changement de session est publié sur le hub Mercure intégré à FrankenPHP,
+ * topic `/navinum/sessions/{id}`, message `{"type": "session", "session": {…}}`.
+ * Les clients s'y abonnent (EventSource) : aucune connexion PHP ne reste ouverte.
+ */
 class SessionController extends AbstractController
 {
     private const SESSIONS_DIR = '/var/cache/sessions';
-    private const UPDATES_DIR = '/var/cache/session_updates';
+
+    public function __construct(
+        private readonly HubInterface $hub,
+        private readonly LoggerInterface $logger,
+    ) {
+    }
+
+    /** Topic Mercure d'une session de quiz. */
+    public static function sessionTopic(string $sessionId): string
+    {
+        return '/navinum/sessions/'.$sessionId;
+    }
 
     private function getSessionsPath(): string
     {
@@ -38,19 +58,21 @@ class SessionController extends AbstractController
         file_put_contents($file, json_encode($session));
     }
 
-    private function getUpdatesPath(): string
-    {
-        $path = $this->getParameter('kernel.project_dir') . self::UPDATES_DIR;
-        if (!is_dir($path)) {
-            mkdir($path, 0777, true);
-        }
-        return $path;
-    }
-
+    /** Publie l'état courant de la session aux joueurs abonnés (best effort : n'interrompt jamais le jeu). */
     private function notifySessionUpdate(string $sessionId): void
     {
-        $updateFile = $this->getUpdatesPath() . '/' . $sessionId . '.update';
-        file_put_contents($updateFile, time());
+        $session = $this->getSession($sessionId);
+        if (null === $session) {
+            return;
+        }
+        try {
+            $this->hub->publish(new Update(
+                self::sessionTopic($sessionId),
+                json_encode(['type' => 'session', 'session' => $session], \JSON_UNESCAPED_UNICODE),
+            ));
+        } catch (\Throwable $e) {
+            $this->logger->warning('Publication Mercure de la session impossible', ['session' => $sessionId, 'error' => $e->getMessage()]);
+        }
     }
 
     #[Route('/api/session/create', name: 'api_session_create', methods: ['POST'])]
@@ -310,69 +332,5 @@ class SessionController extends AbstractController
         $this->notifySessionUpdate($sessionId);
 
         return new JsonResponse(['status' => 'ok', 'session' => $session]);
-    }
-
-    #[Route('/api/session/{sessionId}/stream', name: 'api_session_stream', methods: ['GET'])]
-    public function streamSession(string $sessionId): StreamedResponse
-    {
-        $response = new StreamedResponse();
-        $response->headers->set('Content-Type', 'text/event-stream');
-        $response->headers->set('Cache-Control', 'no-cache');
-        $response->headers->set('X-Accel-Buffering', 'no');
-
-        $response->setCallback(function() use ($sessionId) {
-            $lastUpdateTime = 0;
-            $updateFile = $this->getUpdatesPath() . '/' . $sessionId . '.update';
-
-            // Envoyer la session initiale
-            $session = $this->getSession($sessionId);
-            if ($session) {
-                echo "data: " . json_encode(['type' => 'session', 'session' => $session]) . "\n\n";
-                if (ob_get_level() > 0) {
-                    ob_flush();
-                }
-                flush();
-                $lastUpdateTime = $session['lastUpdate'] ?? 0;
-            }
-
-            // Boucle de polling pour détecter les changements
-            $timeout = 600; // 10 minutes timeout (correspond au timeout Caddy)
-            $startTime = time();
-            $lastHeartbeat = time();
-            $heartbeatInterval = 30; // Heartbeat toutes les 30 secondes
-
-            while (time() - $startTime < $timeout) {
-                if (file_exists($updateFile)) {
-                    $updateTime = (int) file_get_contents($updateFile);
-
-                    if ($updateTime > $lastUpdateTime) {
-                        $session = $this->getSession($sessionId);
-                        if ($session) {
-                            echo "data: " . json_encode(['type' => 'session', 'session' => $session]) . "\n\n";
-                            if (ob_get_level() > 0) {
-                                ob_flush();
-                            }
-                            flush();
-                            $lastUpdateTime = $updateTime;
-                        }
-                    }
-                }
-
-                // Heartbeat toutes les 30 secondes pour maintenir la connexion
-                $now = time();
-                if ($now - $lastHeartbeat >= $heartbeatInterval) {
-                    echo ": heartbeat\n\n";
-                    if (ob_get_level() > 0) {
-                        ob_flush();
-                    }
-                    flush();
-                    $lastHeartbeat = $now;
-                }
-
-                sleep(1);
-            }
-        });
-
-        return $response;
     }
 }

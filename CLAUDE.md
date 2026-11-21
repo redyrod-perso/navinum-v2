@@ -365,9 +365,15 @@ Types d'erreurs: `NetworkError`, `ValidationError`, `UnauthorizedError`, `NotFou
 - `POST /api/session/create` - Créer session
 - `POST /api/session/{id}/join` - Rejoindre
 - `POST /api/session/{id}/start` - Démarrer
-- `GET /api/session/{id}` - État session (polling)
+- `GET /api/session/{id}` - État session (lecture initiale)
 - `POST /api/session/{id}/score` - Mettre à jour score
 - `POST /api/session/{id}/leave` - Quitter
+
+**Temps réel :** chaque changement de session est publié sur le hub Mercure intégré, topic
+`/navinum/sessions/{id}` (`{"type": "session", "session": {…}}`). Le quiz s'y abonne avec `EventSource` et relit l'état
+une fois à la connexion. Il n'y a plus de flux SSE tenu par PHP (`/api/session/{id}/stream` supprimé) : aucun thread
+PHP n'est bloqué pendant une partie. Les fichiers `public/quiz/*`, `public/build/*` et `/config.js` sont servis avec
+`Cache-Control: no-cache` pour que les navigateurs prennent la nouvelle version après un déploiement.
 
 **Configuration (thèmes, questions, temps, joueurs) :** déclarée dans `public/quiz/navinum.json` (`configSchema`,
 valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interactifs → Configurer). Plus de fichiers `.txt`.
