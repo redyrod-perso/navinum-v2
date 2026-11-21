@@ -4,26 +4,32 @@ security:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
     # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
     providers:
-        users_in_memory:
-            memory:
-                users:
-                    admin:
-                        password: '$2y$12$R2nht9bAGVh0mn8hBJqeWueWvAman3z600CJj0NW2uCn2TIZ2E20y'
-                        roles: ['ROLE_ADMIN']
+        # Comptes de l'espace d'administration (entité App\Entity\User)
+        admin_users:
+            entity:
+                class: App\Entity\User
+                property: email
+
+    role_hierarchy:
+        ROLE_ADMIN: [ROLE_ORGANISATEUR]
+        ROLE_ORGANISATEUR: [ROLE_USER]
+
     firewalls:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
         main:
             lazy: true
-            provider: users_in_memory
+            provider: admin_users
+            user_checker: App\Security\UserChecker
             form_login:
                 login_path: app_login
                 check_path: app_login
-                default_target_path: /admin/expositions
+                enable_csrf: true
+                default_target_path: admin_dashboard
             logout:
                 path: app_logout
-                target: /
+                target: app_login
 
             # activate different ways to authenticate
             # https://symfony.com/doc/current/security.html#the-firewall
@@ -34,7 +40,7 @@ security:
     # Easy way to control access for large sections of your site
     # Note: Only the *first* access control that matches will be used
     access_control:
-        - { path: ^/admin, roles: ROLE_ADMIN }
+        - { path: ^/admin, roles: ROLE_ORGANISATEUR }
         # - { path: ^/profile, roles: ROLE_USER }
 
 when@test:

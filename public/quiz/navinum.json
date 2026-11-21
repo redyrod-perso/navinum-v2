@@ -1,0 +1,458 @@
+{
+  "libelle": "Quiz multi-joueurs",
+  "version": "1.0.0",
+  "editeur": "Navinum",
+  "description": "Quiz à choix multiples en groupe : un leader choisit le thème, tous les joueurs du groupe répondent aux mêmes questions et les scores s'affichent en temps réel.",
+  "source_type": "html5",
+  "url": "/quiz/index.html",
+  "events": [
+    {
+      "type": "quiz.started",
+      "description": "Le joueur commence une partie. Payload : { theme, nbQuestions, tempsParQuestion, joueurs, groupe }"
+    },
+    {
+      "type": "quiz.answered",
+      "description": "Le joueur a répondu à une question (ou le temps est écoulé). Payload : { theme, questionIndex, reponse (index ou null si temps écoulé), correcte, tempsReponse (secondes) }"
+    },
+    {
+      "type": "quiz.completed",
+      "description": "Fin de partie pour le joueur. Payload : { theme, score, total, gagnant (pseudo ou null), victoire, joueurs, duree (secondes) }"
+    },
+    {
+      "type": "quiz.abandoned",
+      "description": "Le joueur quitte la partie avant la fin. Payload : { theme, score, questionIndex, total }"
+    }
+  ],
+  "configSchema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Configuration du quiz",
+    "type": "object",
+    "properties": {
+      "tempsParQuestion": {
+        "title": "Temps par question (secondes)",
+        "description": "Durée maximale pour répondre à une question. Une fois écoulée, la question est comptée fausse. 0 = pas de limite.",
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 300,
+        "default": 20
+      },
+      "nbQuestions": {
+        "title": "Nombre de questions par partie",
+        "description": "Nombre de questions posées (les premières du thème choisi). Si le thème en contient moins, toutes sont posées.",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100,
+        "default": 10
+      },
+      "joueursMax": {
+        "title": "Nombre maximum de joueurs",
+        "description": "Nombre maximum de joueurs dans un même groupe (lobby).",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50,
+        "default": 8
+      },
+      "themes": {
+        "title": "Thèmes",
+        "description": "Thèmes proposés au leader du groupe, avec leurs questions.",
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "title": "Thème",
+          "type": "object",
+          "required": [
+            "id",
+            "libelle",
+            "questions"
+          ],
+          "properties": {
+            "id": {
+              "title": "Identifiant",
+              "description": "Identifiant technique unique (minuscules, chiffres, tirets).",
+              "type": "string",
+              "pattern": "^[a-z0-9-]+$",
+              "minLength": 1
+            },
+            "libelle": {
+              "title": "Libellé",
+              "description": "Nom affiché aux joueurs.",
+              "type": "string",
+              "minLength": 1
+            },
+            "questions": {
+              "title": "Questions",
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "title": "Question",
+                "type": "object",
+                "required": [
+                  "question",
+                  "reponses",
+                  "correcte"
+                ],
+                "properties": {
+                  "question": {
+                    "title": "Intitulé",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reponses": {
+                    "title": "Réponses proposées",
+                    "description": "Exactement 4 réponses.",
+                    "type": "array",
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "items": {
+                      "title": "Réponse",
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "correcte": {
+                    "title": "Bonne réponse",
+                    "description": "Numéro de la bonne réponse (0 = première, 3 = quatrième).",
+                    "type": "integer",
+                    "enum": [
+                      0,
+                      1,
+                      2,
+                      3
+                    ],
+                    "default": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "default": [
+          {
+            "id": "histoire",
+            "libelle": "Histoire",
+            "questions": [
+              {
+                "question": "En quelle année a eu lieu la Révolution française ?",
+                "reponses": [
+                  "1789",
+                  "1792",
+                  "1804",
+                  "1815"
+                ],
+                "correcte": 0
+              },
+              {
+                "question": "Qui était le premier empereur de France ?",
+                "reponses": [
+                  "Louis XIV",
+                  "Napoléon Bonaparte",
+                  "Charles de Gaulle",
+                  "François Mitterrand"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quelle bataille a marqué la fin du Premier Empire ?",
+                "reponses": [
+                  "Austerlitz",
+                  "Waterloo",
+                  "Marengo",
+                  "Wagram"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "En quelle année a été signée la Déclaration des droits de l'homme ?",
+                "reponses": [
+                  "1789",
+                  "1791",
+                  "1793",
+                  "1795"
+                ],
+                "correcte": 0
+              },
+              {
+                "question": "Quel roi de France était surnommé le Roi Soleil ?",
+                "reponses": [
+                  "Louis XIII",
+                  "Louis XIV",
+                  "Louis XV",
+                  "Louis XVI"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quelle est la date de la prise de la Bastille ?",
+                "reponses": [
+                  "12 juillet 1789",
+                  "14 juillet 1789",
+                  "21 juillet 1789",
+                  "1er août 1789"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Qui a écrit \"Le Contrat Social\" ?",
+                "reponses": [
+                  "Voltaire",
+                  "Jean-Jacques Rousseau",
+                  "Montesquieu",
+                  "Diderot"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quel événement marque le début de la Première Guerre mondiale ?",
+                "reponses": [
+                  "Bataille de Verdun",
+                  "Attentat de Sarajevo",
+                  "Traité de Versailles",
+                  "Révolution russe"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "En quelle année a eu lieu le débarquement en Normandie ?",
+                "reponses": [
+                  "1943",
+                  "1944",
+                  "1945",
+                  "1946"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Qui était le président français pendant la Seconde Guerre mondiale ?",
+                "reponses": [
+                  "Charles de Gaulle",
+                  "Philippe Pétain",
+                  "Albert Lebrun",
+                  "Paul Reynaud"
+                ],
+                "correcte": 2
+              }
+            ]
+          },
+          {
+            "id": "sciences",
+            "libelle": "Sciences",
+            "questions": [
+              {
+                "question": "Quelle est la formule chimique de l'eau ?",
+                "reponses": [
+                  "H2O",
+                  "CO2",
+                  "O2",
+                  "H2O2"
+                ],
+                "correcte": 0
+              },
+              {
+                "question": "Combien de planètes y a-t-il dans notre système solaire ?",
+                "reponses": [
+                  "7",
+                  "8",
+                  "9",
+                  "10"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quelle est la vitesse de la lumière ?",
+                "reponses": [
+                  "300 000 km/s",
+                  "150 000 km/s",
+                  "450 000 km/s",
+                  "600 000 km/s"
+                ],
+                "correcte": 0
+              },
+              {
+                "question": "Quel élément chimique a pour symbole Fe ?",
+                "reponses": [
+                  "Fluor",
+                  "Fer",
+                  "Francium",
+                  "Fermium"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quelle est la température d'ébullition de l'eau au niveau de la mer ?",
+                "reponses": [
+                  "90°C",
+                  "95°C",
+                  "100°C",
+                  "105°C"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Combien d'os possède un adulte humain ?",
+                "reponses": [
+                  "186",
+                  "206",
+                  "226",
+                  "246"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quelle planète est la plus proche du Soleil ?",
+                "reponses": [
+                  "Vénus",
+                  "Mercure",
+                  "Mars",
+                  "Terre"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Qui a développé la théorie de la relativité ?",
+                "reponses": [
+                  "Isaac Newton",
+                  "Albert Einstein",
+                  "Galileo Galilei",
+                  "Stephen Hawking"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quel gaz les plantes absorbent-elles lors de la photosynthèse ?",
+                "reponses": [
+                  "Oxygène",
+                  "Azote",
+                  "Dioxyde de carbone",
+                  "Hydrogène"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Quelle est la durée d'une année-lumière ?",
+                "reponses": [
+                  "Distance que la lumière parcourt en 1 an",
+                  "Temps que met la lumière pour faire le tour de la Terre",
+                  "365 jours",
+                  "1000 ans"
+                ],
+                "correcte": 0
+              }
+            ]
+          },
+          {
+            "id": "geographie",
+            "libelle": "Géographie",
+            "questions": [
+              {
+                "question": "Quelle est la capitale de l'Italie ?",
+                "reponses": [
+                  "Milan",
+                  "Rome",
+                  "Venise",
+                  "Naples"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Quel est le plus long fleuve du monde ?",
+                "reponses": [
+                  "Amazone",
+                  "Nil",
+                  "Yangtsé",
+                  "Mississippi"
+                ],
+                "correcte": 1
+              },
+              {
+                "question": "Combien y a-t-il de continents sur Terre ?",
+                "reponses": [
+                  "5",
+                  "6",
+                  "7",
+                  "8"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Quelle est la plus haute montagne du monde ?",
+                "reponses": [
+                  "K2",
+                  "Mont Blanc",
+                  "Everest",
+                  "Kilimandjaro"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Quel océan borde la côte ouest de la France ?",
+                "reponses": [
+                  "Océan Indien",
+                  "Océan Pacifique",
+                  "Océan Atlantique",
+                  "Mer Méditerranée"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Quelle est la capitale du Japon ?",
+                "reponses": [
+                  "Kyoto",
+                  "Osaka",
+                  "Tokyo",
+                  "Hiroshima"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Quel pays a la plus grande superficie ?",
+                "reponses": [
+                  "Canada",
+                  "Chine",
+                  "États-Unis",
+                  "Russie"
+                ],
+                "correcte": 3
+              },
+              {
+                "question": "Dans quel pays se trouve la tour Eiffel ?",
+                "reponses": [
+                  "Belgique",
+                  "Suisse",
+                  "France",
+                  "Allemagne"
+                ],
+                "correcte": 2
+              },
+              {
+                "question": "Quel désert est le plus grand du monde ?",
+                "reponses": [
+                  "Sahara",
+                  "Gobi",
+                  "Atacama",
+                  "Antarctique"
+                ],
+                "correcte": 0
+              },
+              {
+                "question": "Quelle est la capitale de l'Espagne ?",
+                "reponses": [
+                  "Barcelone",
+                  "Séville",
+                  "Valence",
+                  "Madrid"
+                ],
+                "correcte": 3
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "required": [
+      "tempsParQuestion",
+      "nbQuestions",
+      "joueursMax",
+      "themes"
+    ]
+  }
+}

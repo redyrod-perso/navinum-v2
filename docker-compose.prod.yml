@@ -11,6 +11,8 @@ services:
     # Forcer APP_ENV=prod au runtime (override la valeur du .env)
     environment:
       APP_ENV: prod
+      APP_DEBUG: "0"
+      FRANKENPHP_WORKER_WATCH: ""
 
     # Ne pas exposer les ports - Traefik s'en charge
     # IMPORTANT: !reset est nécessaire pour supprimer les ports du fichier base
@@ -27,22 +29,10 @@ services:
       - "traefik.http.services.navinum.loadbalancer.server.port=80"
       - "traefik.docker.network=root_default"
     
-    # Utiliser Caddyfile de production
-    volumes:
-      - .:/app
-      - ./Caddyfile.prod:/etc/frankenphp/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    
     # Rejoindre le réseau Traefik
     networks:
       - navinum_network
       - root_default
-
-  mercure:
-    # Ne pas exposer le port 3000 publiquement
-    # IMPORTANT: !reset est nécessaire pour supprimer les ports du fichier base
-    ports: !reset []
 
 networks:
   root_default:

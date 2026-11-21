@@ -181,7 +181,7 @@ class RfidGroupeApiTest extends ApiTestCase
 
         $this->assertResponseIsSuccessful();
         $this->assertJsonContains([
-            '@type' => 'RfidGroupeOutput',
+            '@type' => 'RfidGroupe',
             'id' => $id,
             'nom' => 'Groupe Test Get',
         ]);
@@ -401,6 +401,6 @@ class RfidGroupeApiTest extends ApiTestCase
         $this->assertArrayHasKey('@context', $data);
         $this->assertArrayHasKey('@id', $data);
         $this->assertArrayHasKey('@type', $data);
-        $this->assertEquals('RfidGroupeOutput', $data['@type']);
+        $this->assertEquals('RfidGroupe', $data['@type']);
     }
 }

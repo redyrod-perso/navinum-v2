@@ -18,17 +18,8 @@ class LogVisiteControllerTest extends ApiTestCase
         $em = static::getContainer()->get('doctrine')->getManager();
         $connection = $em->getConnection();
 
-        // Disable foreign key checks temporarily
-        $connection->executeStatement('SET FOREIGN_KEY_CHECKS=0');
-
-        // Truncate tables
-        $connection->executeStatement('TRUNCATE TABLE log_visite');
-        $connection->executeStatement('TRUNCATE TABLE visiteur');
-        $connection->executeStatement('TRUNCATE TABLE interactif');
-        $connection->executeStatement('TRUNCATE TABLE exposition');
-
-        // Re-enable foreign key checks
-        $connection->executeStatement('SET FOREIGN_KEY_CHECKS=1');
+        // Vide les tables (PostgreSQL : CASCADE gère les clés étrangères)
+        $connection->executeStatement('TRUNCATE TABLE log_visite, visiteur, interactif, exposition CASCADE');
     }
 
     public function testGetTotalWithoutParams(): void

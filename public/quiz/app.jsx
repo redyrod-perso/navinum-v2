@@ -1,4 +1,4 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 // Initialiser le client API Navinum
 const api = new NavinumAPI({
@@ -6,9 +6,116 @@ const api = new NavinumAPI({
 });
 
 // Référence aux classes d'erreur
-const { NotFoundError } = NavinumAPI;
+const { NotFoundError, GoneError } = NavinumAPI;
+
+// Manifeste de l'interactif : son configSchema porte les valeurs par défaut
+const MANIFEST_URL = '/quiz/navinum.json';
+
+// Jeton de lancement Navinum (?nv=) - null en mode autonome / développement
+const LAUNCH_TOKEN = NavinumAPI.getLaunchToken();
+
+// Contexte de lancement (résultat de api.launch()), null en mode autonome
+let launchContext = null;
+
+// Valeurs par défaut du configSchema (pour fusionner les mises à jour Mercure)
+let manifestDefaults = {};
+
+/**
+ * Envoie un événement à Navinum, uniquement si le quiz a été lancé avec un jeton.
+ * Les erreurs sont journalisées sans interrompre le jeu.
+ */
+function track(type, payload = {}) {
+    if (!launchContext) return;
+    launchContext.track(type, payload)
+        .catch(err => console.warn(`[Quiz] Événement ${type} non envoyé:`, err));
+}
+
+/**
+ * Extrait les valeurs `default` des propriétés de premier niveau d'un JSON Schema.
+ */
+function schemaDefaults(schema) {
+    const defaults = {};
+    const properties = (schema && schema.properties) || {};
+    Object.keys(properties).forEach(key => {
+        if (properties[key] && properties[key].default !== undefined) {
+            // Copie profonde pour ne jamais modifier le manifeste
+            defaults[key] = JSON.parse(JSON.stringify(properties[key].default));
+        }
+    });
+    return defaults;
+}
+
+/**
+ * Nettoie la configuration : entiers bornés, thèmes et questions valides uniquement.
+ */
+function normalizeConfig(raw) {
+    const toInt = (value, fallback, min, max) => {
+        const n = parseInt(value, 10);
+        if (Number.isNaN(n)) return fallback;
+        return Math.min(max, Math.max(min, n));
+    };
+
+    const themes = (Array.isArray(raw.themes) ? raw.themes : [])
+        .filter(theme => theme && theme.id && Array.isArray(theme.questions))
+        .map(theme => ({
+            id: String(theme.id),
+            libelle: theme.libelle || String(theme.id),
+            questions: theme.questions.filter(q =>
+                q && q.question &&
+                Array.isArray(q.reponses) && q.reponses.length === 4 &&
+                Number.isInteger(q.correcte) && q.correcte >= 0 && q.correcte <= 3
+            )
+        }))
+        .filter(theme => theme.questions.length > 0);
+
+    return {
+        tempsParQuestion: toInt(raw.tempsParQuestion, 20, 0, 300),
+        nbQuestions: toInt(raw.nbQuestions, 10, 1, 100),
+        joueursMax: toInt(raw.joueursMax, 8, 1, 50),
+        themes
+    };
+}
+
+/**
+ * Charge la configuration du quiz :
+ * - avec ?nv= : ctx.config (configuration du parcours) fusionnée sur les défauts du manifeste
+ * - sans jeton : valeurs `default` du configSchema de navinum.json
+ */
+async function loadQuizConfig() {
+    let defaults = {};
+    try {
+        const res = await fetch(MANIFEST_URL);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const manifest = await res.json();
+        defaults = schemaDefaults(manifest.configSchema);
+        manifestDefaults = defaults;
+    } catch (err) {
+        // Sans jeton, le manifeste est la seule source de configuration
+        if (!LAUNCH_TOKEN) throw new Error('Impossible de charger ' + MANIFEST_URL + ' (' + err.message + ')');
+        console.warn('[Quiz] Manifeste indisponible, utilisation de ctx.config seul:', err);
+    }
+
+    if (!LAUNCH_TOKEN) {
+        return { config: normalizeConfig(defaults), ctx: null };
+    }
+
+    const ctx = await api.launch(LAUNCH_TOKEN);
+    return { config: normalizeConfig({ ...defaults, ...(ctx.config || {}) }), ctx };
+}
 
 function QuizApp() {
+    const [config, setConfig] = useState(null);
+    const [configError, setConfigError] = useState(null);
+    const [timeLeft, setTimeLeft] = useState(0);
+    // Suivi de la partie en cours (score local, début, minuteur de passage à la question suivante)
+    const gameRef = useRef({ score: 0, startedAt: null, nextTimeout: null });
+    // Configuration reçue via Mercure, appliquée hors partie uniquement
+    const [pendingConfig, setPendingConfig] = useState(null);
+    const [configNotice, setConfigNotice] = useState(false);
+    // Config courante accessible depuis les callbacks longue durée (SSE)
+    const configRef = useRef(null);
+    configRef.current = config;
+
     const [stage, setStage] = useState('home'); // home, lobby, playing, finished
     const [themes, setThemes] = useState([]);
     const [selectedTheme, setSelectedTheme] = useState(null);
@@ -26,13 +133,125 @@ function QuizApp() {
     const [winner, setWinner] = useState(null);
     const [notification, setNotification] = useState(null);
 
-    // Charger les thèmes disponibles
+    // Charger la configuration (jeton Navinum ou défauts du manifeste) et les thèmes
     useEffect(() => {
-        fetch('/quiz/themes.json')
-            .then(res => res.json())
-            .then(data => setThemes(data))
-            .catch(err => console.error('Erreur chargement thèmes:', err));
+        let unsubscribeConfig = () => {};
+        let cancelled = false;
+        loadQuizConfig()
+            .then(({ config, ctx }) => {
+                if (cancelled) return;
+                launchContext = ctx;
+                if (ctx) {
+                    console.log('[Quiz] Lancé par Navinum:', ctx.interactif, ctx.parcours);
+                    if (ctx.visiteur && !ctx.visiteur.anonyme && ctx.visiteur.pseudo) {
+                        setPlayerName(ctx.visiteur.pseudo);
+                    }
+                } else {
+                    console.log('[Quiz] Mode autonome : configuration par défaut de navinum.json');
+                }
+                if (config.themes.length === 0) {
+                    setConfigError('Aucun thème configuré pour ce quiz.');
+                    return;
+                }
+                setThemes(config.themes.map(t => ({ id: t.id, libelle: t.libelle })));
+                setConfig(config);
+
+                // Mises à jour de configuration en direct (no-op si ctx.mercure est null)
+                if (ctx) {
+                    unsubscribeConfig = ctx.onConfigChange(newConfig => {
+                        const next = normalizeConfig({ ...manifestDefaults, ...newConfig });
+                        if (next.themes.length === 0) {
+                            console.warn('[Quiz] Configuration reçue sans thème valide, ignorée');
+                            return;
+                        }
+                        console.log('[Quiz] Nouvelle configuration reçue (Mercure)');
+                        setPendingConfig(next);
+                    });
+                }
+            })
+            .catch(err => {
+                console.error('Erreur chargement configuration:', err);
+                if (err instanceof GoneError) {
+                    setConfigError('Ce lien a expiré. Relancez le quiz depuis Navinum.');
+                } else if (err instanceof NotFoundError) {
+                    setConfigError('Lien de lancement invalide.');
+                } else {
+                    setConfigError('Impossible de charger la configuration du quiz : ' + err.message);
+                }
+            });
+        return () => {
+            cancelled = true;
+            unsubscribeConfig();
+        };
     }, []);
+
+    // Appliquer une configuration reçue pour les PROCHAINES parties : jamais pendant une partie
+    useEffect(() => {
+        if (!pendingConfig || stage === 'playing') return;
+        setConfig(pendingConfig);
+        setThemes(pendingConfig.themes.map(t => ({ id: t.id, libelle: t.libelle })));
+        // Thème sélectionné supprimé de la nouvelle configuration : le désélectionner
+        if (selectedTheme && !pendingConfig.themes.some(t => t.id === selectedTheme)) {
+            setSelectedTheme(null);
+        }
+        setPendingConfig(null);
+        setConfigNotice(true);
+    }, [pendingConfig, stage]);
+
+    useEffect(() => {
+        if (!configNotice) return;
+        const timer = setTimeout(() => setConfigNotice(false), 5000);
+        return () => clearTimeout(timer);
+    }, [configNotice]);
+
+    const configNoticeEl = configNotice && (
+        <div className="config-notice" style={{ textAlign: 'center', fontSize: '0.85em', color: '#4caf50', marginBottom: '15px' }}>
+            ✓ Configuration mise à jour
+        </div>
+    );
+
+    const themeLabel = (themeId) => {
+        const theme = themes.find(t => t.id === themeId);
+        return theme ? theme.libelle : (themeId || '');
+    };
+
+    // Événements de début et de fin de partie (envoyés seulement avec un jeton)
+    useEffect(() => {
+        if (stage === 'playing') {
+            gameRef.current.startedAt = Date.now();
+            track('quiz.started', {
+                theme: selectedTheme,
+                nbQuestions: questions.length,
+                tempsParQuestion: config ? config.tempsParQuestion : null,
+                joueurs: players.length,
+                groupe: sessionId
+            });
+        } else if (stage === 'finished') {
+            const startedAt = gameRef.current.startedAt;
+            track('quiz.completed', {
+                theme: selectedTheme,
+                score: gameRef.current.score,
+                total: questions.length,
+                gagnant: winner,
+                victoire: winner !== null && winner === playerName,
+                joueurs: players.length,
+                duree: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null
+            });
+        }
+    }, [stage]);
+
+    // Compte à rebours par question (tempsParQuestion = 0 : pas de limite)
+    useEffect(() => {
+        if (stage !== 'playing' || !config || config.tempsParQuestion <= 0 || showResult) {
+            return;
+        }
+        if (timeLeft <= 0) {
+            selectAnswer(null); // Temps écoulé : réponse comptée fausse
+            return;
+        }
+        const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+        return () => clearTimeout(timer);
+    }, [stage, timeLeft, showResult, currentQuestionIndex]);
 
     // Fonction pour charger les groupes existants
     const loadGroups = () => {
@@ -225,36 +444,34 @@ function QuizApp() {
         setTimeout(() => setNotification(null), 3000);
     };
 
-    const loadQuestionsAndStart = async (theme) => {
-        try {
-            const res = await fetch(`/quiz/questions/${theme}.txt`);
-            const text = await res.text();
-
-            // Parser le fichier texte
-            const lines = text.trim().split('\n');
-            const questions = [];
-
-            lines.forEach((line, index) => {
-                if (!line.trim()) return;
-
-                const parts = line.split('|');
-                if (parts.length !== 6) return;
-
-                questions.push({
-                    id: index,
-                    question: parts[0],
-                    answers: [parts[1], parts[2], parts[3], parts[4]],
-                    correctIndex: parseInt(parts[5])
-                });
-            });
-
-            setQuestions(questions);
-            setSelectedTheme(theme);
-            setStage('playing');
-        } catch (err) {
-            console.error('Erreur chargement questions:', err);
-            alert('Erreur lors du chargement des questions');
+    const loadQuestionsAndStart = (themeId) => {
+        // Les questions viennent de la configuration (ctx.config ou défauts du manifeste).
+        // configRef : ce callback est aussi appelé depuis le flux SSE, ouvert avant une mise à jour éventuelle
+        const config = configRef.current;
+        const theme = config && config.themes.find(t => t.id === themeId);
+        if (!theme) {
+            console.error('Thème introuvable dans la configuration:', themeId);
+            alert('Erreur : thème "' + themeId + '" introuvable');
+            return;
         }
+
+        // Les nbQuestions premières questions, dans l'ordre : identiques pour tous les joueurs
+        const questions = theme.questions.slice(0, config.nbQuestions).map((q, index) => ({
+            id: index,
+            question: q.question,
+            answers: q.reponses,
+            correctIndex: q.correcte
+        }));
+
+        gameRef.current.score = 0;
+        setQuestions(questions);
+        setCurrentQuestionIndex(0);
+        setSelectedAnswer(null);
+        setShowResult(false);
+        setWinner(null);
+        setTimeLeft(config.tempsParQuestion);
+        setSelectedTheme(themeId);
+        setStage('playing');
     };
 
     const joinGlobalSession = async () => {
@@ -271,6 +488,22 @@ function QuizApp() {
         try {
             // Normaliser le nom du groupe pour l'utiliser comme sessionId
             const normalizedGroupName = groupName.trim();
+
+            // 0. Vérifier que le groupe n'est pas complet (joueursMax)
+            try {
+                const existing = await api.sessions.get(normalizedGroupName);
+                const existingPlayers = (existing && existing.session && existing.session.players) || [];
+                const alreadyIn = existingPlayers.some(p => p.name === playerName);
+                if (!alreadyIn && existingPlayers.length >= config.joueursMax) {
+                    alert(`Ce groupe est complet (${config.joueursMax} joueurs maximum)`);
+                    return;
+                }
+            } catch (err) {
+                // 404 : la session n'existe pas encore, elle sera créée plus bas
+                if (!(err instanceof NotFoundError)) {
+                    console.warn('Vérification du nombre de joueurs impossible:', err);
+                }
+            }
 
             // 1. Vérifier si le groupe RFID existe ou le créer
             try {
@@ -369,20 +602,28 @@ function QuizApp() {
         }
     };
 
+    // answerIndex = null : temps écoulé
     const selectAnswer = (answerIndex) => {
-        if (selectedAnswer !== null) return;
+        if (showResult) return;
 
         const question = questions[currentQuestionIndex];
-        const isCorrect = answerIndex === question.correctIndex;
+        const isCorrect = answerIndex !== null && answerIndex === question.correctIndex;
 
         setSelectedAnswer(answerIndex);
         setShowResult(true);
 
-        const myCurrentScore = scores[playerName] || 0;
+        track('quiz.answered', {
+            theme: selectedTheme,
+            questionIndex: currentQuestionIndex,
+            reponse: answerIndex,
+            correcte: isCorrect,
+            tempsReponse: config && config.tempsParQuestion > 0 ? config.tempsParQuestion - timeLeft : null
+        });
 
         if (isCorrect) {
-            const newScore = myCurrentScore + 1;
-            setScores({ ...scores, [playerName]: newScore });
+            const newScore = gameRef.current.score + 1;
+            gameRef.current.score = newScore;
+            setScores(prev => ({ ...prev, [playerName]: newScore }));
 
             // Mettre à jour le score côté serveur
             api.sessions.updateScore(sessionId, {
@@ -399,12 +640,14 @@ function QuizApp() {
         }
 
         // Passer à la question suivante après 2 secondes
-        setTimeout(() => {
+        gameRef.current.nextTimeout = setTimeout(() => {
+            gameRef.current.nextTimeout = null;
             if (currentQuestionIndex < questions.length - 1) {
-                setCurrentQuestionIndex(currentQuestionIndex + 1);
                 setSelectedAnswer(null);
                 setShowResult(false);
-            } else if ((scores[playerName] || 0) < questions.length) {
+                setTimeLeft(config.tempsParQuestion);
+                setCurrentQuestionIndex(currentQuestionIndex + 1);
+            } else {
                 // Toutes les questions sont posées mais pas toutes correctes
                 setStage('finished');
             }
@@ -412,6 +655,21 @@ function QuizApp() {
     };
 
     const disconnect = async () => {
+        if (gameRef.current.nextTimeout) {
+            clearTimeout(gameRef.current.nextTimeout);
+            gameRef.current.nextTimeout = null;
+        }
+        if (stage === 'playing') {
+            track('quiz.abandoned', {
+                theme: selectedTheme,
+                score: gameRef.current.score,
+                questionIndex: currentQuestionIndex,
+                total: questions.length
+            });
+        }
+        gameRef.current.score = 0;
+        gameRef.current.startedAt = null;
+
         if (sessionId && playerName) {
             try {
                 await api.sessions.leave(sessionId, { playerName: playerName });
@@ -423,7 +681,9 @@ function QuizApp() {
         // Réinitialiser l'état
         setStage('home');
         setSelectedTheme(null);
-        setPlayerName('');
+        // Conserver le pseudo du visiteur Navinum s'il est connu
+        const visiteur = launchContext && launchContext.visiteur;
+        setPlayerName(visiteur && !visiteur.anonyme && visiteur.pseudo ? visiteur.pseudo : '');
         setGroupName('');
         setSessionId('');
         setPlayers([]);
@@ -440,10 +700,31 @@ function QuizApp() {
     };
 
     // Rendu selon l'étape
+    if (configError) {
+        return (
+            <div className="quiz-container">
+                <h1>🎯 Quiz Interactif</h1>
+                <div className="session-info">
+                    <strong>{configError}</strong>
+                </div>
+            </div>
+        );
+    }
+
+    if (!config) {
+        return (
+            <div className="quiz-container">
+                <h1>🎯 Quiz Interactif</h1>
+                <p style={{ textAlign: 'center', color: '#666' }}>Chargement...</p>
+            </div>
+        );
+    }
+
     if (stage === 'home') {
         return (
             <div className="quiz-container">
                 <h1>🎯 Quiz Interactif</h1>
+                {configNoticeEl}
                 <h2>Bienvenue !</h2>
 
                 <div className="input-group">
@@ -559,8 +840,10 @@ function QuizApp() {
                     <strong>🏠 Groupe :</strong> {groupName || sessionId}
                 </div>
 
+                {configNoticeEl}
+
                 <div className="lobby-players">
-                    <h2>Joueurs connectés ({players.length})</h2>
+                    <h2>Joueurs connectés ({players.length}/{config.joueursMax})</h2>
                     <ul className="players-list">
                         {players.map((player, index) => (
                             <li key={index} className="player-item">
@@ -580,11 +863,11 @@ function QuizApp() {
                             <div className="theme-selection">
                                 {themes.map(theme => (
                                     <button
-                                        key={theme}
-                                        className={`theme-button ${selectedTheme === theme ? 'selected' : ''}`}
-                                        onClick={() => setSelectedTheme(theme)}
+                                        key={theme.id}
+                                        className={`theme-button ${selectedTheme === theme.id ? 'selected' : ''}`}
+                                        onClick={() => setSelectedTheme(theme.id)}
                                     >
-                                        {theme.charAt(0).toUpperCase() + theme.slice(1)}
+                                        {theme.libelle}
                                     </button>
                                 ))}
                             </div>
@@ -633,7 +916,7 @@ function QuizApp() {
         return (
             <div className="quiz-container">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <h1 style={{ margin: 0 }}>🎯 Quiz - {selectedTheme.charAt(0).toUpperCase() + selectedTheme.slice(1)}</h1>
+                    <h1 style={{ margin: 0 }}>🎯 Quiz - {themeLabel(selectedTheme)}</h1>
                     <button className="disconnect-button" onClick={disconnect}>
                         Se déconnecter
                     </button>
@@ -660,6 +943,12 @@ function QuizApp() {
                         Question {currentQuestionIndex + 1}/{questions.length}: {question.question}
                     </div>
 
+                    {config.tempsParQuestion > 0 && (
+                        <div className="timer" style={{ textAlign: 'right', marginBottom: '15px', fontWeight: 'bold', color: timeLeft <= 5 ? '#f44336' : '#667eea' }}>
+                            {showResult && selectedAnswer === null ? '⏰ Temps écoulé !' : `⏱ ${Math.max(0, timeLeft)} s`}
+                        </div>
+                    )}
+
                     <div className="answers-grid">
                         {question.answers.map((answer, index) => {
                             let className = 'answer-button';
@@ -677,7 +966,7 @@ function QuizApp() {
                                     key={index}
                                     className={className}
                                     onClick={() => selectAnswer(index)}
-                                    disabled={selectedAnswer !== null}
+                                    disabled={showResult}
                                 >
                                     {answer}
                                 </button>
@@ -729,4 +1018,4 @@ function QuizApp() {
     return null;
 }
 
-ReactDOM.render(<QuizApp />, document.getElementById('root'));
+ReactDOM.createRoot(document.getElementById('root')).render(<QuizApp />);

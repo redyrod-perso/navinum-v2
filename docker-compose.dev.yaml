@@ -1,4 +1,9 @@
+# Override de DÉVELOPPEMENT
+# Usage : docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
 services:
     app:
         env_file:
             - .env.local
+        environment:
+            # Le worker FrankenPHP redémarre automatiquement quand le code change
+            FRANKENPHP_WORKER_WATCH: watch

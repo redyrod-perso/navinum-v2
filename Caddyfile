@@ -1,19 +1,35 @@
+# Caddyfile unique pour le dev et la prod (FrankenPHP).
+# Les différences passent par des variables d'environnement (voir docker-compose*.y*ml) :
+#   FRANKENPHP_WORKER_WATCH  "watch" en dev : le worker redémarre quand le code change ; vide en prod
+#   MERCURE_JWT_SECRET       clé de signature des JWT Mercure (publication et abonnement)
+#   MERCURE_CORS_ORIGINS     origines autorisées à s'abonner au hub Mercure
 {
-    frankenphp
-    auto_https off
+	frankenphp
+	auto_https off
 }
 
 :80 {
-    root * /app/public
-    encode zstd br gzip
+	root * /app/public
+	encode zstd br gzip
 
-    # Mercure reverse proxy
-    @mercure path /.well-known/mercure*
-    handle @mercure {
-        reverse_proxy mercure:3000 {
-            flush_interval -1
-        }
-    }
+	# Hub Mercure intégré à FrankenPHP (temps réel : quiz multijoueur, événements des interactifs)
+	mercure {
+		publisher_jwt {env.MERCURE_JWT_SECRET}
+		subscriber_jwt {env.MERCURE_JWT_SECRET}
+		anonymous
+		subscriptions
+		cors_origins {$MERCURE_CORS_ORIGINS:*}
+		publish_origins *
+	}
 
-    php_server
+	# Vulcain : préchargement des ressources liées de l'API (Preload / Fields)
+	vulcain
+
+	# Mode worker : l'application Symfony reste chargée en mémoire entre les requêtes
+	php_server {
+		worker {
+			file /app/public/index.php
+			{$FRANKENPHP_WORKER_WATCH}
+		}
+	}
 }

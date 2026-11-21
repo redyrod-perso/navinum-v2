@@ -66,6 +66,28 @@ export class NotFoundError extends NavinumAPIError {
 }
 
 /**
+ * Erreur ressource expirée (410)
+ *
+ * Levée notamment quand un jeton de lancement (`?nv=`) a expiré.
+ *
+ * @class
+ * @example
+ * try {
+ *     const ctx = await api.launch();
+ * } catch (error) {
+ *     if (error instanceof NavinumAPI.GoneError) {
+ *         alert('Ce lien a expiré, relancez l\'interactif depuis la borne.');
+ *     }
+ * }
+ */
+export class GoneError extends NavinumAPIError {
+    constructor(message = 'Ressource expirée') {
+        super(message, 410, null);
+        this.name = 'GoneError';
+    }
+}
+
+/**
  * Erreur serveur (500+)
  */
 export class ServerError extends NavinumAPIError {
@@ -81,5 +103,6 @@ export default {
     ValidationError,
     UnauthorizedError,
     NotFoundError,
+    GoneError,
     ServerError
 };

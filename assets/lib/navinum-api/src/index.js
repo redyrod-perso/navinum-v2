@@ -6,6 +6,7 @@ import {
     ValidationError,
     UnauthorizedError,
     NotFoundError,
+    GoneError,
     ServerError
 } from './core/Errors.js';
 
@@ -16,6 +17,7 @@ import { InteractifAPI } from './resources/InteractifAPI.js';
 import { VisiteurAPI } from './resources/VisiteurAPI.js';
 import { RfidAPI } from './resources/RfidAPI.js';
 import { LogVisiteAPI } from './resources/LogVisiteAPI.js';
+import { LaunchAPI, LAUNCH_TOKEN_PARAM } from './resources/LaunchAPI.js';
 
 /**
  * Navinum API Client
@@ -55,6 +57,51 @@ export class NavinumAPI {
         this.visiteurs = new VisiteurAPI(this.client);
         this.rfid = new RfidAPI(this.client);
         this.logVisites = new LogVisiteAPI(this.client);
+        this.launches = new LaunchAPI(this.client);
+    }
+
+    /**
+     * Récupère le contexte de lancement de l'interactif (jeton `?nv=`).
+     *
+     * Navinum ouvre un interactif via `<url>?nv=<token>`. Cette méthode lit le jeton
+     * (ou utilise celui fourni), appelle `GET /api/launch/{token}` et retourne
+     * la configuration fusionnée du parcours, une fonction `track()` pour envoyer
+     * des événements (`POST /api/launch/{token}/events`) et `onConfigChange()` pour
+     * suivre les modifications de configuration publiées sur Mercure.
+     *
+     * @param {string|null} [token] - Jeton explicite ; à défaut, lu dans `window.location.search` (`nv`)
+     * @returns {Promise<LaunchContext|null>} `{ token, interactif, parcours, exposition, config, visiteur, expiresAt, mercure, track(type, payload), onConfigChange(callback) }`,
+     *          ou null si aucun jeton n'est présent (mode autonome / développement)
+     * @throws {NotFoundError} Si le jeton est inconnu (404)
+     * @throws {GoneError} Si le jeton a expiré (410)
+     * @throws {NetworkError} En cas d'erreur réseau
+     *
+     * @example
+     * const ctx = await api.launch();
+     * if (ctx) {
+     *     console.log('Parcours :', ctx.parcours?.libelle, 'config :', ctx.config);
+     *     await ctx.track('quiz.completed', { score: 8, total: 10 });
+     *     // Mises à jour de configuration en direct (Mercure) ; no-op si ctx.mercure est null
+     *     const unsubscribe = ctx.onConfigChange(config => console.log('Nouvelle config', config));
+     * } else {
+     *     // Pas de ?nv= : utiliser la configuration par défaut
+     * }
+     */
+    async launch(token) {
+        return this.launches.resolve(token);
+    }
+
+    /**
+     * Indique si la page courante a été lancée avec un jeton `?nv=`.
+     *
+     * @param {string} [search=window.location.search] - Query string à analyser
+     * @returns {string|null} Le jeton, ou null
+     *
+     * @example
+     * if (NavinumAPI.getLaunchToken()) { ... }
+     */
+    static getLaunchToken(search) {
+        return LaunchAPI.getTokenFromUrl(search);
     }
 
     /**
@@ -96,6 +143,8 @@ NavinumAPI.NetworkError = NetworkError;
 NavinumAPI.ValidationError = ValidationError;
 NavinumAPI.UnauthorizedError = UnauthorizedError;
 NavinumAPI.NotFoundError = NotFoundError;
+NavinumAPI.GoneError = GoneError;
+NavinumAPI.LAUNCH_TOKEN_PARAM = LAUNCH_TOKEN_PARAM;
 NavinumAPI.ServerError = ServerError;
 
 // Export des erreurs pour utilisation externe
@@ -105,7 +154,9 @@ export {
     ValidationError,
     UnauthorizedError,
     NotFoundError,
-    ServerError
+    GoneError,
+    ServerError,
+    LaunchAPI
 };
 
 // Export par défaut

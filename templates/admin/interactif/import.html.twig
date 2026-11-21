@@ -1,0 +1,23 @@
+{% extends 'admin/layout.html.twig' %}
+{% block title %}Importer un manifeste{% endblock %}
+{% block body %}
+<nav aria-label="Fil d'Ariane"><ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ path('admin_interactif_index') }}">Interactifs</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Importer un manifeste</li>
+</ol></nav>
+<h1 class="h3">Importer un manifeste <code>navinum.json</code></h1>
+<p class="text-secondary" style="max-width: 70ch">
+    Chaque interactif publie un manifeste qui le décrit (libellé, version, URL de lancement, événements émis)
+    et déclare ses réglages sous forme de <strong>JSON Schema</strong> (<code>configSchema</code>).
+    Si un interactif du même libellé existe, il est mis à jour.
+</p>
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+<div class="card"><div class="card-body">
+<form method="post">
+    <input type="hidden" name="_token" value="{{ csrf_token('import_manifest') }}">
+    <label class="form-label" for="manifest">Contenu du manifeste</label>
+    <textarea class="form-control font-monospace" id="manifest" name="manifest" rows="20" spellcheck="false" required placeholder='{"libelle": "Mon jeu", "version": "1.0.0", "url": "https://…", "configSchema": {"type": "object", "properties": {…}}}'>{{ manifest }}</textarea>
+    <button class="btn btn-primary mt-3" type="submit"><i class="bi bi-upload"></i> Importer</button>
+</form>
+</div></div>
+{% endblock %}

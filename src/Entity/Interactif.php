@@ -7,7 +7,9 @@ use App\Repository\InteractifRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\DBAL\Types\Types;
+use App\Service\ConfigSchema;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Ignore;
 
 #[ORM\Entity(repositoryClass: InteractifRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -21,8 +23,10 @@ class Interactif
     #[ORM\Column(length: 255)]
     private string $libelle;
 
-    #[ORM\ManyToMany(targetEntity: Parcours::class, mappedBy: 'interactifs')]
-    private Collection $parcours;
+    /** @var Collection<int, ParcoursInteractif> */
+    #[ORM\OneToMany(targetEntity: ParcoursInteractif::class, mappedBy: 'interactif')]
+    #[Ignore]
+    private Collection $parcoursInteractifs;
 
     #[ORM\Column(length: 32, nullable: true)]
     private ?string $source_type = null;
@@ -141,7 +145,7 @@ class Interactif
     public function __construct()
     {
         $this->initializeEntity();
-        $this->parcours = new ArrayCollection();
+        $this->parcoursInteractifs = new ArrayCollection();
     }
 
     public function getLibelle(): ?string
@@ -205,33 +209,58 @@ class Interactif
     }
 
     /**
-     * @return Collection<int, Parcours>
+     * Placements de cet interactif dans des parcours (avec leur config).
+     *
+     * @return Collection<int, ParcoursInteractif>
      */
-    public function getParcours(): Collection
+    #[Ignore]
+    public function getParcoursInteractifs(): Collection
     {
-        return $this->parcours;
+        return $this->parcoursInteractifs;
     }
 
-    public function addParcours(Parcours $parcours): self
+    /**
+     * Contenu décodé de `variable` : un JSON Schema avec valeurs `default`
+     * (ou, à défaut, un JSON de configuration simple). Null si vide ou invalide.
+     */
+    #[Ignore]
+    public function getConfigSchema(): ?array
     {
-        if (!$this->parcours->contains($parcours)) {
-            $this->parcours->add($parcours);
-            $parcours->addInteractif($this);
+        if (null === $this->variable || '' === trim($this->variable)) {
+            return null;
         }
+        $decoded = json_decode($this->variable, true);
 
-        return $this;
+        return \is_array($decoded) ? $decoded : null;
     }
 
-    public function removeParcours(Parcours $parcours): self
+    /** L'interactif déclare-t-il un schéma de configuration ? */
+    #[Ignore]
+    public function isConfigurable(): bool
     {
-        if ($this->parcours->removeElement($parcours)) {
-            $parcours->removeInteractif($this);
-        }
+        $schema = $this->getConfigSchema();
 
-        return $this;
+        return null !== $schema && ConfigSchema::isSchema($schema);
     }
 
-    // Additional getters/setters can be added later as needed
+    /**
+     * Configuration par défaut de l'interactif, issue des `default` du schéma.
+     * Si `variable` est un JSON simple (pas un schéma), il est renvoyé tel quel.
+     */
+    #[Ignore]
+    public function getDefaultConfig(): array
+    {
+        $schema = $this->getConfigSchema();
+        if (null === $schema) {
+            return [];
+        }
+        if (!ConfigSchema::isSchema($schema)) {
+            return $schema;
+        }
+        $defaults = ConfigSchema::defaults($schema);
+
+        return \is_array($defaults) ? $defaults : [];
+    }
 
     public function getSourceType(): ?string
     {
@@ -637,25 +666,6 @@ class Interactif
     public function setOrdre(?int $ordre): static
     {
         $this->ordre = $ordre;
-
-        return $this;
-    }
-
-    public function addParcour(Parcours $parcour): static
-    {
-        if (!$this->parcours->contains($parcour)) {
-            $this->parcours->add($parcour);
-            $parcour->addInteractif($this);
-        }
-
-        return $this;
-    }
-
-    public function removeParcour(Parcours $parcour): static
-    {
-        if ($this->parcours->removeElement($parcour)) {
-            $parcour->removeInteractif($this);
-        }
 
         return $this;
     }

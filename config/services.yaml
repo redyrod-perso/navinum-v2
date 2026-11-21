@@ -21,16 +21,5 @@ services:
             - '../src/Entity/'
             - '../src/Kernel.php'
 
-    # Sylius Grid: alias interfaces for autowiring
-    Sylius\Component\Grid\Provider\GridProviderInterface: '@sylius.grid.chain_provider'
-    Sylius\Component\Grid\View\GridViewFactoryInterface: '@sylius.grid.view_factory'
-
-    # Sylius-compatible repositories
-    App\Repository\ParcoursRepository:
-        class: App\Repository\ParcoursRepository
-        factory: ['@doctrine.orm.entity_manager', 'getRepository']
-        arguments:
-            - App\Entity\Parcours
-
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

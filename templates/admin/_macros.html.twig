@@ -1,0 +1,21 @@
+{# Affichage générique d'une valeur dans une liste d'admin #}
+{% macro value(v) %}
+    {%- if v is null or v is same as('') -%}
+        <span class="placeholder-dash">—</span>
+    {%- elseif v is same as(true) -%}
+        <i class="bi bi-check-circle-fill text-success" title="Oui"></i>
+    {%- elseif v is same as(false) -%}
+        <i class="bi bi-x-circle text-secondary" title="Non"></i>
+    {%- elseif v.timestamp is defined -%}
+        {{ v|date('d/m/Y') }}
+    {%- elseif v is iterable -%}
+        {%- set first = v|first -%}
+        {%- if v|length == 0 -%}<span class="placeholder-dash">—</span>
+        {%- elseif first is not iterable and first.id is not defined -%}{{ v|join(', ') }}
+        {%- else -%}<span class="badge text-bg-light border">{{ v|length }}</span>{%- endif -%}
+    {%- elseif v.libelle is defined -%}
+        {{ v.libelle }}
+    {%- else -%}
+        {% set s = v ~ '' %}{{ s|length > 60 ? s|slice(0, 60) ~ '…' : s }}
+    {%- endif -%}
+{% endmacro %}

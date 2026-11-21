@@ -35,15 +35,22 @@ trait DatabaseTestTrait
     }
 
     /**
-     * Login helper for tests
+     * Connecte un compte d'admin (créé à la volée) sur le client de test.
+     * $role : User::ROLE_ADMIN ou User::ROLE_ORGANISATEUR.
      */
-    protected function login($client): void
+    protected function login($client, string $role = \App\Entity\User::ROLE_ADMIN, ?\App\Entity\Organisateur $organisateur = null): \App\Entity\User
     {
-        $crawler = $client->request('GET', '/login');
-        $form = $crawler->filter('form')->form([
-            '_username' => 'admin',
-            '_password' => 'admin',
-        ]);
-        $client->submit($form);
+        $em = $client->getContainer()->get(EntityManagerInterface::class);
+        $email = strtolower(str_replace('ROLE_', '', $role)).'-'.bin2hex(random_bytes(4)).'@test.local';
+        $user = (new \App\Entity\User())
+            ->setEmail($email)
+            ->setRoles([$role])
+            ->setOrganisateur($organisateur)
+            ->setPassword('test-non-utilise');
+        $em->persist($user);
+        $em->flush();
+        $client->loginUser($user);
+
+        return $user;
     }
 }

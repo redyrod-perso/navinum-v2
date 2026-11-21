@@ -2,6 +2,11 @@
 framework:
     secret: '%env(APP_SECRET)%'
 
+    # Derrière Traefik (VPS) : faire confiance aux en-têtes X-Forwarded-* pour connaître
+    # le vrai schéma (https) et l'hôte — redirections, URL absolues, cookies sécurisés.
+    trusted_proxies: '%env(default::TRUSTED_PROXIES)%'
+    trusted_headers: ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'x-forwarded-port', 'x-forwarded-prefix']
+
     # Note that the session will be started ONLY if you read or write from it.
     session:
         handler_id: ~
