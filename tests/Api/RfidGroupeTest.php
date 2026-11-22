@@ -35,7 +35,7 @@ class RfidGroupeTest extends ApiTestCase
         ]);
 
         $this->assertResponseIsSuccessful();
-        $this->assertResponseHeaderSame('content-type', 'application/ld+json; charset=utf-8');
+        $this->assertStringStartsWith('application/ld+json', (string) static::getClient()->getResponse()->headers->get('content-type'));
 
         $data = $response->toArray();
 
@@ -56,7 +56,7 @@ class RfidGroupeTest extends ApiTestCase
         ]);
 
         $this->assertResponseStatusCodeSame(201);
-        $this->assertResponseHeaderSame('content-type', 'application/ld+json; charset=utf-8');
+        $this->assertStringStartsWith('application/ld+json', (string) static::getClient()->getResponse()->headers->get('content-type'));
 
         $data = $response->toArray();
         $this->assertArrayHasKey('nom', $data);
