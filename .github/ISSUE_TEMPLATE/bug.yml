@@ -1,0 +1,38 @@
+name: Bug
+description: Quelque chose ne fonctionne pas comme prévu
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ Dépôt **public** : ne pas décrire ici une faille de sécurité non corrigée, ni de secret, d'adresse IP ou de port.
+  - type: textarea
+    id: constat
+    attributes:
+      label: Constat
+      description: Ce qui se passe, et ce qui était attendu.
+    validations: { required: true }
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: "1. Ouvrir …\n2. Cliquer sur …\n3. …"
+    validations: { required: true }
+  - type: dropdown
+    id: zone
+    attributes:
+      label: Zone
+      options: [Admin, API, Quiz / interactif, Librairie @navinum/api, Gamification, Infrastructure, Autre]
+    validations: { required: true }
+  - type: dropdown
+    id: environnement
+    attributes:
+      label: Environnement
+      options: [Local, Production]
+  - type: checkboxes
+    id: regle
+    attributes:
+      label: Règle du projet
+      options:
+        - label: "Le correctif viendra avec un test qui échoue sans lui (« un bug = un nouveau test »)."
+          required: true

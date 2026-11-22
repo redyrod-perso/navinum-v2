@@ -580,7 +580,15 @@ n8n tourne sur le VPS (`https://n8n.srv802003.hstgr.cloud`, même réseau Docker
 ### Suivi
 
 - Les tickets de la feuille de route sont sur GitHub (étiquettes `auth`, `gamification`, `n8n`, `ia`, `quiz`, `infra`,
-  `dette-technique`).
+  `dette-technique`), regroupés en **jalons de sprint** (Sprint 1 quiz gamifié, Sprint 2 comptes visiteurs, Sprint 3 n8n)
+  et suivis sur le tableau **GitHub Project « Navinum »** (champs Status et Sprint).
+- Modèles : tickets « Bug » (avec la règle « un bug = un nouveau test ») et « Fonctionnalité », modèle de PR avec la
+  check-list du projet (`.github/`).
+- `main` est protégée : fusion uniquement par PR, jobs de CI « Symfony » et « Librairie JS et quiz » obligatoires,
+  conversations résolues, pas de force-push.
+- Dependabot ouvre chaque semaine des PR de mise à jour (Composer, npm de la librairie ; mensuel pour Actions et Docker),
+  testées par la CI ; alertes et correctifs de sécurité activés. La protection contre les secrets bloque tout push
+  contenant un mot de passe ou une clé détectée.
 - ⚠️ Le dépôt est **public** : ne jamais y écrire (code, docs, tickets, messages de commit) d'adresse IP, de port exposé,
   de secret ou de faille de sécurité non corrigée. Ces points se suivent hors du dépôt.
 

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Feuille de route et décisions de conception
+    url: https://github.com/redyrod-perso/navinum-v2/blob/main/CLAUDE.md#feuille-de-route-et-décisions-de-conception
+    about: Les choix déjà faits (authentification, gamification, n8n, IA) avant d'ouvrir un ticket.
