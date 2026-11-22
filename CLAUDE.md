@@ -552,10 +552,12 @@ n8n tourne sur le VPS (`https://n8n.srv802003.hstgr.cloud`, même réseau Docker
   (`symfony/ai`) dans Navinum (contrôle fin, quotas, journalisation). Dans les deux cas, l'interactif passe par l'API
   Navinum (jamais de clé d'IA côté navigateur) et reçoit sa personnalité/ses consignes via sa config JSON Schema.
 
-### Points d'infrastructure à traiter
+### Suivi
 
-- 8 paquets retenus sur le VPS (noyau 6.8.0-151…) : à installer lors d'une maintenance (redémarrage).
-- Projet datatourism (nginx/php) : déclare encore une route Traefik sur `activites-touristiques.online` (masquée).
+- Les tickets de la feuille de route sont sur GitHub (étiquettes `auth`, `gamification`, `n8n`, `ia`, `quiz`, `infra`,
+  `dette-technique`).
+- ⚠️ Le dépôt est **public** : ne jamais y écrire (code, docs, tickets, messages de commit) d'adresse IP, de port exposé,
+  de secret ou de faille de sécurité non corrigée. Ces points se suivent hors du dépôt.
 
 ## Troubleshooting
 
