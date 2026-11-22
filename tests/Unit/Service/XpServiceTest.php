@@ -9,9 +9,12 @@ use App\Repository\XpRepository;
 use App\Service\XpService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
+/** Les mocks partagés de setUp() ne sont pas tous utilisés par chaque test. */
+#[AllowMockObjectsWithoutExpectations]
 class XpServiceTest extends TestCase
 {
     private $entityManager;

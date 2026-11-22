@@ -29,8 +29,8 @@ class ParcoursType extends AbstractType
                     'placeholder' => 'Nom du parcours'
                 ],
                 'constraints' => [
-                    new NotBlank(['message' => 'Le libellé est obligatoire']),
-                    new Length(['max' => 255, 'maxMessage' => 'Le libellé ne peut dépasser 255 caractères'])
+                    new NotBlank(message: 'Le libellé est obligatoire'),
+                    new Length(max: 255, maxMessage: 'Le libellé ne peut dépasser 255 caractères')
                 ]
             ])
             ->add('ordre', IntegerType::class, [
@@ -42,7 +42,7 @@ class ParcoursType extends AbstractType
                     'min' => 0
                 ],
                 'constraints' => [
-                    new PositiveOrZero(['message' => 'L\'ordre doit être un nombre positif'])
+                    new PositiveOrZero(message: 'L\'ordre doit être un nombre positif')
                 ],
                 'help' => 'Laissez vide pour ajouter à la fin'
             ])
