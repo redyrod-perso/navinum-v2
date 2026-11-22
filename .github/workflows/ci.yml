@@ -42,7 +42,7 @@ jobs:
       DATABASE_URL: postgresql://navinum@127.0.0.1:5432/navinum_test?serverVersion=16&charset=utf8
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -85,7 +85,7 @@ jobs:
         working-directory: assets/lib/navinum-api
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
