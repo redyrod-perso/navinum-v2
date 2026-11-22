@@ -5,6 +5,7 @@ namespace App\Service;
 use App\Entity\Interactif;
 use App\Entity\LaunchToken;
 use App\Entity\LogVisite;
+use App\Controller\Api\VisiteurController;
 use App\Entity\ParcoursInteractif;
 use App\Entity\Visiteur;
 use Doctrine\ORM\EntityManagerInterface;
@@ -107,11 +108,7 @@ final class LaunchService
             'parcours' => $parcours ? ['id' => (string) $parcours->getId(), 'libelle' => $parcours->getLibelle()] : null,
             'exposition' => $exposition ? ['id' => (string) $exposition->getId(), 'libelle' => $exposition->getLibelle()] : null,
             'config' => (object) $token->getConfig(),
-            'visiteur' => $visiteur ? [
-                'id' => (string) $visiteur->getId(),
-                'pseudo' => $visiteur->getPseudoSon() ?? $visiteur->getPrenom(),
-                'anonyme' => (bool) $visiteur->isAnonyme(),
-            ] : null,
+            'visiteur' => $visiteur ? VisiteurController::profile($visiteur) : null,
             'expiresAt' => $token->getExpiresAt()->format(\DATE_ATOM),
             // Temps réel (hub Mercure intégré à FrankenPHP) : la config peut être mise à jour à chaud
             'mercure' => $token->getParcoursInteractif() ? [
@@ -119,6 +116,26 @@ final class LaunchService
                 'topics' => ['config' => self::configTopic((string) $token->getParcoursInteractif()->getId())],
             ] : null,
         ];
+    }
+
+    /**
+     * Rattache un visiteur à un lancement (et au LogVisite déjà commencé, le cas échéant).
+     *
+     * @return bool false si le lancement appartient déjà à un autre visiteur
+     */
+    public function identify(LaunchToken $token, Visiteur $visiteur): bool
+    {
+        $current = $token->getVisiteur();
+        if (null !== $current && !$current->getId()->equals($visiteur->getId())) {
+            return false;
+        }
+        $token->setVisiteur($visiteur);
+        if (null !== ($log = $token->getLogVisite()) && null === $log->getVisiteur()) {
+            $log->setVisiteur($visiteur);
+        }
+        $this->em->flush();
+
+        return true;
     }
 
     /**

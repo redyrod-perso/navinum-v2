@@ -7,9 +7,12 @@ use App\Service\LogVisiteService;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
 
+/** Les mocks partagés de setUp() ne sont pas tous utilisés par chaque test. */
+#[AllowMockObjectsWithoutExpectations]
 class LogVisiteServiceTest extends TestCase
 {
     private $entityManager;

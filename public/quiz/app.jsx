@@ -1,25 +1,36 @@
 const { useState, useEffect, useRef } = React;
 
-// Initialiser le client API Navinum
+// Client Navinum : SEUL point d'accès du quiz à Navinum (API, temps réel Mercure, identification).
+// Aucun fetch / EventSource / localStorage direct dans un interactif (vérifié par la CI).
 const api = new NavinumAPI({
-    debug: true
+    debug: true,
+    // Hub Mercure : celui du site par défaut ; config.js peut en indiquer un autre
+    mercureHub: window.APP_CONFIG?.MERCURE_PUBLIC_URL
 });
 
 // Référence aux classes d'erreur
 const { NotFoundError, GoneError } = NavinumAPI;
 
+/**
+ * Identifie le joueur (visiteur Navinum conservé sur l'appareil, ou nouvel invité) et rattache
+ * la partie lancée par Navinum à son visiteur. Jamais bloquant : la partie continue sans.
+ */
+async function identifyPlayer(pseudo) {
+    try {
+        const visiteur = await api.visiteurs.identifier(pseudo);
+        if (launchContext) {
+            await launchContext.identify(visiteur.token);
+        }
+        console.log('[Quiz] Joueur identifié :', visiteur.pseudo, visiteur.id);
+        return visiteur;
+    } catch (err) {
+        console.warn('[Quiz] Identification impossible, la partie continue sans :', err);
+        return null;
+    }
+}
+
 // Manifeste de l'interactif : son configSchema porte les valeurs par défaut
 const MANIFEST_URL = '/quiz/navinum.json';
-
-/**
- * URL d'abonnement au hub Mercure intégré à FrankenPHP (même domaine que le site,
- * sauf si window.APP_CONFIG.MERCURE_PUBLIC_URL indique un autre hub).
- */
-function mercureSubscribeUrl(topic) {
-    const hub = new URL(window.APP_CONFIG?.MERCURE_PUBLIC_URL || '/.well-known/mercure', window.location.origin);
-    hub.searchParams.append('topic', topic);
-    return hub.toString();
-}
 
 // Jeton de lancement Navinum (?nv=) - null en mode autonome / développement
 const LAUNCH_TOKEN = NavinumAPI.getLaunchToken();
@@ -38,21 +49,6 @@ function track(type, payload = {}) {
     if (!launchContext) return;
     launchContext.track(type, payload)
         .catch(err => console.warn(`[Quiz] Événement ${type} non envoyé:`, err));
-}
-
-/**
- * Extrait les valeurs `default` des propriétés de premier niveau d'un JSON Schema.
- */
-function schemaDefaults(schema) {
-    const defaults = {};
-    const properties = (schema && schema.properties) || {};
-    Object.keys(properties).forEach(key => {
-        if (properties[key] && properties[key].default !== undefined) {
-            // Copie profonde pour ne jamais modifier le manifeste
-            defaults[key] = JSON.parse(JSON.stringify(properties[key].default));
-        }
-    });
-    return defaults;
 }
 
 /**
@@ -94,10 +90,7 @@ function normalizeConfig(raw) {
 async function loadQuizConfig() {
     let defaults = {};
     try {
-        const res = await fetch(MANIFEST_URL);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const manifest = await res.json();
-        defaults = schemaDefaults(manifest.configSchema);
+        ({ defaults } = await api.interactifs.chargerManifeste(MANIFEST_URL));
         manifestDefaults = defaults;
     } catch (err) {
         // Sans jeton, le manifeste est la seule source de configuration
@@ -155,6 +148,8 @@ function QuizApp() {
                     console.log('[Quiz] Lancé par Navinum:', ctx.interactif, ctx.parcours);
                     if (ctx.visiteur && !ctx.visiteur.anonyme && ctx.visiteur.pseudo) {
                         setPlayerName(ctx.visiteur.pseudo);
+                    } else if (api.visiteurs.courant()?.pseudo) {
+                        setPlayerName(api.visiteurs.courant().pseudo); // joueur déjà venu sur ce navigateur
                     }
                 } else {
                     console.log('[Quiz] Mode autonome : configuration par défaut de navinum.json');
@@ -263,30 +258,10 @@ function QuizApp() {
         return () => clearTimeout(timer);
     }, [stage, timeLeft, showResult, currentQuestionIndex]);
 
-    // Fonction pour charger les groupes existants
+    // Charger les groupes existants (via la librairie Navinum)
     const loadGroups = () => {
-        fetch('/api/rfid_groupes', {
-            headers: {
-                'Accept': 'application/ld+json'
-            }
-        })
-            .then(res => {
-                if (!res.ok) {
-                    throw new Error('Erreur HTTP: ' + res.status);
-                }
-                return res.json();
-            })
-            .then(data => {
-                console.log('Groupes reçus:', data);
-                // API Platform retourne hydra:member ou member
-                const groupes = data['hydra:member'] || data.member || [];
-                if (Array.isArray(groupes)) {
-                    setExistingGroups(groupes);
-                } else {
-                    console.error('Format inattendu:', data);
-                    setExistingGroups([]);
-                }
-            })
+        api.rfidGroupes.list()
+            .then(groupes => setExistingGroups(groupes))
             .catch(err => {
                 console.error('Erreur chargement groupes:', err);
                 setExistingGroups([]);
@@ -300,159 +275,43 @@ function QuizApp() {
         }
     }, [stage]);
 
-    // Écouter Mercure pour les nouveaux groupes créés (uniquement sur home)
+    // Nouveaux groupes créés en direct (Mercure, uniquement sur home)
     useEffect(() => {
         if (stage !== 'home') {
             return;
         }
-
-        let eventSource = null;
-
-        try {
-            // S'abonner au topic des groupes RFID (hub Mercure du site courant)
-            eventSource = new EventSource(mercureSubscribeUrl('rfid-groupes'));
-
-            eventSource.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-
-                    if (data.type === 'groupe_created') {
-                        console.log('Nouveau groupe créé:', data.groupe);
-                        // Rafraîchir la liste des groupes
-                        loadGroups();
-                    }
-                } catch (err) {
-                    console.error('Erreur parsing Mercure:', err);
-                }
-            };
-
-            eventSource.onerror = (err) => {
-                console.error('Erreur Mercure:', err);
-                eventSource.close();
-            };
-        } catch (err) {
-            console.error('Erreur création EventSource Mercure:', err);
-        }
-
-        return () => {
-            if (eventSource) {
-                eventSource.close();
-            }
-        };
+        return api.rfidGroupes.onCreated(groupe => {
+            console.log('Nouveau groupe créé:', groupe.nom);
+            loadGroups();
+        });
     }, [stage]);
 
-    // Mises à jour de la session en temps réel via le hub Mercure (topic /navinum/sessions/{id}),
-    // avec reconnexion automatique. À chaque (re)connexion, l'état courant est relu une fois
-    // pour ne rien manquer entre l'arrivée dans le lobby et l'abonnement.
+    // Session en temps réel (Mercure) : la librairie relit l'état à chaque (re)connexion
+    // puis transmet chaque changement (joueurs, démarrage, scores).
     useEffect(() => {
         if (!sessionId || (stage !== 'lobby' && stage !== 'playing')) {
             return;
         }
+        console.log(`[Session] Suivi en temps réel de ${sessionId}`);
 
-        let eventSource = null;
-        let reconnectTimeout = null;
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 10;
-        const baseReconnectDelay = 1000; // 1 seconde
+        return api.sessions.subscribe(sessionId, session => {
+            setPlayers(session.players || []);
 
-        const connect = () => {
-            if (reconnectAttempts >= maxReconnectAttempts) {
-                console.error('[SSE] Nombre maximum de reconnexions atteint');
-                return;
+            // Le leader a démarré le quiz
+            if (stage === 'lobby' && session.status === 'playing' && session.theme) {
+                console.log(`[Session] Quiz démarré ! Thème : ${session.theme}`);
+                loadQuestionsAndStart(session.theme);
             }
 
-            console.log(`[SSE] Abonnement Mercure à la session ${sessionId} (tentative ${reconnectAttempts + 1})`);
-
-            try {
-                eventSource = new EventSource(mercureSubscribeUrl(`/navinum/sessions/${sessionId}`));
-
-                eventSource.onopen = () => {
-                    console.log('[SSE] Connexion établie');
-                    reconnectAttempts = 0; // Reset le compteur en cas de succès
-                    // Synchronisation initiale (remplace le premier message de l'ancien flux PHP)
-                    api.sessions.get(sessionId)
-                        .then(res => {
-                            if (res && res.session && eventSource) {
-                                eventSource.onmessage({ data: JSON.stringify({ type: 'session', session: res.session }) });
-                            }
-                        })
-                        .catch(err => console.warn('[SSE] Synchronisation initiale impossible:', err));
-                };
-
-                eventSource.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-
-                        if (data.type === 'session' && data.session) {
-                            const session = data.session;
-                            console.log('[SSE] Session reçue:', {
-                                status: session.status,
-                                theme: session.theme,
-                                nbPlayers: session.players?.length
-                            });
-
-                            // Mise à jour de la liste des joueurs (comparaison intelligente)
-                            const playersChanged = players.length !== session.players.length ||
-                                players.some((p, i) =>
-                                    p.name !== session.players[i]?.name ||
-                                    p.score !== session.players[i]?.score ||
-                                    p.isLeader !== session.players[i]?.isLeader
-                                );
-
-                            if (playersChanged) {
-                                console.log('[SSE] Mise à jour liste des joueurs');
-                                setPlayers(session.players);
-                            }
-
-                            // Vérifier si le quiz a démarré
-                            if (stage === 'lobby' && session.status === 'playing' && session.theme) {
-                                console.log(`[SSE] Quiz démarré ! Chargement du thème: ${session.theme}`);
-                                loadQuestionsAndStart(session.theme);
-                            }
-
-                            // Mise à jour des scores
-                            if (stage === 'playing' && session.players) {
-                                const newScores = {};
-                                session.players.forEach(player => {
-                                    newScores[player.name] = player.score;
-                                });
-                                setScores(newScores);
-                            }
-                        }
-                    } catch (err) {
-                        console.error('[SSE] Erreur parsing:', err);
-                    }
-                };
-
-                eventSource.onerror = (err) => {
-                    console.warn('[SSE] Erreur connexion, reconnexion dans ' +
-                        (baseReconnectDelay * (reconnectAttempts + 1)) + 'ms');
-                    eventSource.close();
-
-                    // Reconnexion avec backoff exponentiel
-                    const delay = baseReconnectDelay * (reconnectAttempts + 1);
-                    reconnectAttempts++;
-
-                    reconnectTimeout = setTimeout(() => {
-                        connect();
-                    }, delay);
-                };
-            } catch (err) {
-                console.error('[SSE] Erreur création EventSource:', err);
+            // Scores en direct
+            if (stage === 'playing' && session.players) {
+                const newScores = {};
+                session.players.forEach(player => {
+                    newScores[player.name] = player.score;
+                });
+                setScores(newScores);
             }
-        };
-
-        connect();
-
-        return () => {
-            if (eventSource) {
-                console.log('[SSE] Fermeture de la connexion');
-                eventSource.close();
-            }
-            if (reconnectTimeout) {
-                clearTimeout(reconnectTimeout);
-            }
-        };
+        }, { onError: err => console.warn('[Session] Relecture de l’état impossible :', err) });
     }, [sessionId, stage]);
 
     const showNotification = (message) => {
@@ -505,6 +364,9 @@ function QuizApp() {
             // Normaliser le nom du groupe pour l'utiliser comme sessionId
             const normalizedGroupName = groupName.trim();
 
+            // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
+            await identifyPlayer(playerName.trim());
+
             // 0. Vérifier que le groupe n'est pas complet (joueursMax)
             try {
                 const existing = await api.sessions.get(normalizedGroupName);
@@ -521,35 +383,13 @@ function QuizApp() {
                 }
             }
 
-            // 1. Vérifier si le groupe RFID existe ou le créer
+            // 1. Retrouver le groupe par son nom, ou le créer (via la librairie Navinum)
             try {
-                // Chercher le groupe par nom via l'API
-                const response = await fetch(`/api/rfid_groupes?nom=${encodeURIComponent(normalizedGroupName)}`);
-                const groupsData = await response.json();
-
-                if (!groupsData.member || groupsData.member.length === 0) {
-                    // Le groupe n'existe pas, le créer
-                    const createResponse = await fetch('/api/rfid_groupes', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/ld+json',
-                        },
-                        body: JSON.stringify({
-                            nom: normalizedGroupName
-                        })
-                    });
-
-                    if (!createResponse.ok) {
-                        throw new Error('Impossible de créer le groupe');
-                    }
-
-                    console.log('Groupe RFID créé:', normalizedGroupName);
-                } else {
-                    console.log('Groupe RFID trouvé:', groupsData.member[0]);
-                }
+                const groupe = await api.rfidGroupes.findOrCreate(normalizedGroupName);
+                console.log('Groupe :', groupe.nom);
             } catch (err) {
-                console.error('Erreur gestion groupe RFID:', err);
-                alert('Erreur lors de la gestion du groupe: ' + err.message);
+                console.error('Erreur gestion groupe :', err);
+                alert('Erreur lors de la gestion du groupe : ' + err.message);
                 return;
             }
 
@@ -698,8 +538,8 @@ function QuizApp() {
         setStage('home');
         setSelectedTheme(null);
         // Conserver le pseudo du visiteur Navinum s'il est connu
-        const visiteur = launchContext && launchContext.visiteur;
-        setPlayerName(visiteur && !visiteur.anonyme && visiteur.pseudo ? visiteur.pseudo : '');
+        const visiteur = (launchContext && launchContext.visiteur) || api.visiteurs.courant();
+        setPlayerName(visiteur && visiteur.pseudo ? visiteur.pseudo : '');
         setGroupName('');
         setSessionId('');
         setPlayers([]);

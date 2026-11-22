@@ -2,6 +2,12 @@
 
 Librairie JavaScript complète pour interagir avec les APIs Symfony de Navinum. Supporte tous les interactifs (quiz, jeux, parcours, etc.) avec gestion des erreurs, retry automatique et mode debug.
 
+> **Principe : c'est le seul point d'accès d'un interactif à Navinum.** API REST, temps réel (Mercure),
+> identification du joueur, lancement et configuration passent tous par cette librairie. Un interactif ne fait
+> **jamais** de `fetch`, d'`EventSource` ni de `localStorage` direct (la CI de Navinum le vérifie). C'est ce qui
+> permet aux développeurs tiers de créer un interactif sans connaître les détails de l'API, et à Navinum de faire
+> évoluer ces détails (authentification OAuth / RFID, nouveaux endpoints) sans casser les interactifs.
+
 ---
 
 ## Table des matières
@@ -215,18 +221,27 @@ await api.sessions.updateScore('global', {
 });
 ```
 
-#### Récupérer l'état de la session (Polling)
+#### Récupérer l'état de la session
 
 ```javascript
 const data = await api.sessions.get('global');
 console.log('Joueurs:', data.session.players);
 console.log('Status:', data.session.status);
+```
 
-// Polling automatique toutes les secondes
-setInterval(async () => {
-    const updated = await api.sessions.get('global');
-    updateUI(updated.session);
-}, 1000);
+#### Suivre la session en temps réel (Mercure)
+
+Pas de polling : la librairie s'abonne au hub Mercure (topic `/navinum/sessions/{id}`), relit l'état à chaque
+(re)connexion, puis transmet chaque changement (joueur qui rejoint, démarrage, scores, départ).
+
+```javascript
+const stop = api.sessions.subscribe('Classe 4B', session => {
+    afficherJoueurs(session.players);
+    if (session.status === 'playing') demarrer(session.theme);
+}, { onError: err => console.warn('Relecture impossible', err) });
+
+// en quittant le lobby ou la partie
+stop();
 ```
 
 #### Quitter une session
@@ -372,6 +387,15 @@ interactifs.forEach(interactif => {
 });
 ```
 
+#### Charger le manifeste et sa configuration par défaut
+
+```javascript
+// Valeurs `default` du configSchema de navinum.json (mode autonome, base de fusion)
+const { manifest, defaults } = await api.interactifs.chargerManifeste('/quiz/navinum.json');
+const ctx = await api.launch();
+const config = ctx ? { ...defaults, ...ctx.config } : defaults;
+```
+
 #### Enregistrer une interaction
 
 ```javascript
@@ -389,44 +413,52 @@ await api.interactifs.logInteraction(5, {
 
 ### Visiteurs
 
-#### Enregistrer un nouveau visiteur
+Un interactif identifie son joueur par un **jeton visiteur** (`nvv1.…`). Pour le prototype, il s'obtient en créant
+un **visiteur invité** à partir d'un pseudo ; le futur module d'authentification (compte en ligne, badge RFID) délivrera
+le même jeton, sans changement pour les interactifs.
+
+#### Identifier le joueur (recommandé)
+
+`identifier()` réutilise le visiteur conservé sur l'appareil s'il porte le même pseudo et que son jeton est valide,
+sinon crée un visiteur invité et le conserve. Si l'API est injoignable, le visiteur connu est gardé.
 
 ```javascript
-const visiteur = await api.visiteurs.register({
-    nom: 'Dupont',
-    prenom: 'Jean',
-    email: 'jean.dupont@example.com',
-    telephone: '0612345678',
-    csp: 'etudiant',
-    age: 25
-});
-
-console.log('Visiteur créé, ID:', visiteur.id);
+const joueur = await api.visiteurs.identifier('Alice');   // { id, pseudo, anonyme, token }
+const pseudoConnu = api.visiteurs.courant()?.pseudo;        // sans appel réseau (pré-remplir le formulaire)
+api.visiteurs.oublier();                                   // « ce n'est pas moi » / déconnexion
 ```
 
-#### Rechercher un visiteur par RFID
+Le stockage se règle à la création du client : `new NavinumAPI({ storage: sessionStorage })`, ou `storage: null`
+pour ne rien conserver. Bas niveau : `api.visiteurs.inviter(pseudo)` et `api.visiteurs.moi(token)`.
+
+#### Rattacher la partie au visiteur
 
 ```javascript
-const visiteur = await api.visiteurs.getByRfid('TAG123456');
-
-if (visiteur) {
-    console.log('Bonjour', visiteur.prenom, visiteur.nom);
-}
+const ctx = await api.launch();          // interactif lancé par Navinum (?nv=)
+if (ctx) await ctx.identify(joueur.token); // POST /api/launch/{token}/visiteur (joueur = api.visiteurs.identifier(…))
+// les événements ctx.track(...) sont désormais enregistrés au nom du visiteur (LogVisite)
 ```
 
-#### CRUD standard
+> Le profil renvoyé (`{ id, pseudo, anonyme }`) ne contient jamais d'email ni de donnée personnelle.
+> Les opérations CRUD `api.visiteurs.getAll()`, `getById()`, `update()`… (`/api/visiteurs`) sont réservées à
+> l'admin : elles renvoient 401 depuis un interactif. `register()` et `getByRfid()` sont dépréciées (endpoints
+> inexistants) en attendant le module d'authentification.
+
+---
+
+### Groupes de visiteurs
+
+Classe, famille, équipe… Dans le quiz, le groupe sert aussi d'identifiant de session commun.
+Lecture et création publiques ; modification et suppression réservées à l'admin.
 
 ```javascript
-// Liste
-const visiteurs = await api.visiteurs.getAll();
+const groupes = await api.rfidGroupes.list();                    // [{ id, nom }, …]
+const groupe = await api.rfidGroupes.findByNom('Classe 4B');     // nom exact, ou null
+const cree = await api.rfidGroupes.create('Classe 4B');          // ValidationError si nom vide
+const g = await api.rfidGroupes.findOrCreate('Classe 4B');       // l'un ou l'autre
 
-// Par ID
-const v = await api.visiteurs.getById(123);
-
-// Update
-await api.visiteurs.update(123, {
-    email: 'nouveau@email.com'
-});
+// Nouveaux groupes en direct (Mercure, topic `rfid-groupes`)
+const stop = api.rfidGroupes.onCreated(groupe => rafraichirListe());
 ```
 
 ---
@@ -714,7 +746,13 @@ const api = new NavinumAPI({
     retryAttempts: 3,
 
     // Délai entre les tentatives (ms)
-    retryDelay: 2000
+    retryDelay: 2000,
+
+    // Hub Mercure (temps réel) : relatif à baseURL ou absolu (défaut : /.well-known/mercure)
+    mercureHub: '/.well-known/mercure',
+
+    // Stockage du visiteur identifié (défaut : localStorage ; null : ne rien conserver)
+    storage: localStorage
 });
 ```
 

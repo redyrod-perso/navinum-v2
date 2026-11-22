@@ -34,6 +34,11 @@ Navinum ouvre `<url>?nv=<jeton>` (jeton : 48 caractères hexadécimaux, valable 
 ```
 404 jeton inconnu · 410 jeton expiré.
 
+### `POST /api/launch/{jeton}/visiteur` → 200 (contexte à jour)
+En-tête `Authorization: Bearer <jeton visiteur>` (obtenu par `POST /api/visiteur/invite` `{ "pseudo": "Alice" }`,
+plus tard par le module d'authentification en ligne / RFID). Rattache le visiteur au lancement et au `LogVisite`
+déjà commencé. 401 jeton visiteur invalide, 409 lancement déjà rattaché à un autre visiteur.
+
 ### `POST /api/launch/{jeton}/events` → 202
 Corps : `{ "type": "quiz.completed", "payload": { "score": 8 } }` → `{ "accepted": true, "logVisite": "uuid" }`
 - `payload.score` (entier) met à jour le score du `LogVisite` ;

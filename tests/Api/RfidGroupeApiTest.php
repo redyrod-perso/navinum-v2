@@ -8,6 +8,9 @@ use Hautelook\AliceBundle\PhpUnit\RefreshDatabaseTrait;
 
 class RfidGroupeApiTest extends ApiTestCase
 {
+    // Comportement explicite (défaut futur d'API Platform 5) : le noyau démarre avec chaque client de test
+    protected static ?bool $alwaysBootKernel = true;
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -204,7 +207,7 @@ class RfidGroupeApiTest extends ApiTestCase
     /**
      * Test PUT pour mettre à jour un groupe
      */
-    public function testUpdateRfidGroupe(): void
+    public function testUpdateRfidGroupeRefuseSansAuthentification(): void
     {
         $client = static::createClient();
 
@@ -229,18 +232,16 @@ class RfidGroupeApiTest extends ApiTestCase
             ],
         ]);
 
-        $this->assertResponseIsSuccessful();
-        $this->assertJsonContains([
-            '@id' => $iri,
-            'id' => $id,
-            'nom' => 'Groupe Modifié',
-        ]);
+        // Modification réservée à l'admin : refusée sans authentification
+        $this->assertResponseStatusCodeSame(401);
+        $client->request('GET', $iri);
+        $this->assertJsonContains(['@id' => $iri, 'id' => $id, 'nom' => 'Groupe Original']);
     }
 
     /**
      * Test DELETE d'un groupe
      */
-    public function testDeleteRfidGroupe(): void
+    public function testDeleteRfidGroupeRefuseSansAuthentification(): void
     {
         $client = static::createClient();
 
@@ -259,12 +260,10 @@ class RfidGroupeApiTest extends ApiTestCase
         // Supprimer le groupe
         $client->request('DELETE', $iri);
 
-        $this->assertResponseStatusCodeSame(204);
-        $this->assertEmpty($client->getResponse()->getContent());
-
-        // Vérifier que le groupe n'existe plus
+        // Suppression réservée à l'admin : refusée sans authentification, le groupe existe toujours
+        $this->assertResponseStatusCodeSame(401);
         $client->request('GET', $iri);
-        $this->assertResponseStatusCodeSame(404);
+        $this->assertResponseIsSuccessful();
     }
 
     /**

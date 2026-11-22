@@ -35,10 +35,13 @@ use Symfony\Component\Validator\Constraints as Assert;
             validationContext: ['groups' => ['Default', 'rfid_groupe:create']],
             processor: \App\State\Processor\RfidGroupeProcessor::class
         ),
+        // Lecture et création publiques (utilisées par le quiz) ; modification et suppression réservées à l'admin
         new Put(
+            security: "is_granted('ROLE_ADMIN')",
             processor: \App\State\Processor\RfidGroupeProcessor::class
         ),
         new Delete(
+            security: "is_granted('ROLE_ADMIN')",
             processor: \App\State\Processor\RfidGroupeProcessor::class
         ),
     ],

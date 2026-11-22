@@ -10,6 +10,9 @@ use App\Entity\Visiteur;
 
 class LogVisiteControllerTest extends ApiTestCase
 {
+    // Comportement explicite (défaut futur d'API Platform 5) : le noyau démarre avec chaque client de test
+    protected static ?bool $alwaysBootKernel = true;
+
     protected function setUp(): void
     {
         parent::setUp();

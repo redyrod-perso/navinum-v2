@@ -159,7 +159,8 @@ export class ApiClient {
             let responseData = null;
             const contentType = response.headers.get('content-type');
 
-            if (contentType && contentType.includes('application/json')) {
+            // application/json, mais aussi application/ld+json (API Platform) et application/problem+json
+            if (contentType && /[/+]json\b/.test(contentType)) {
                 responseData = await response.json();
             } else {
                 responseData = await response.text();

@@ -7,6 +7,48 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.5.0] - 2026-11-22
+
+La librairie devient le **seul point d'accès** des interactifs à Navinum : API, temps réel, identification.
+
+### Added
+- `api.rfidGroupes` : `list(params)`, `findByNom(nom)`, `create(nom)`, `findOrCreate(nom)` (JSON-LD géré par la
+  librairie) et `onCreated(callback)` (Mercure, topic `rfid-groupes`).
+- `api.sessions.subscribe(sessionId, callback, { onError })` : suivi temps réel d'une session (Mercure, topic
+  `/navinum/sessions/{id}`), avec relecture de l'état à chaque (re)connexion. Remplace le polling.
+- `api.visiteurs.identifier(pseudo)` : réutilise le visiteur conservé sur l'appareil (même pseudo, jeton valide) ou
+  crée un invité ; `api.visiteurs.courant()` et `api.visiteurs.oublier()`. Premier élément du module d'authentification.
+- `api.interactifs.chargerManifeste(url)` → `{ manifest, defaults }` et `InteractifAPI.defaultsFromSchema(schema)`.
+- Options `mercureHub` (hub Mercure, défaut `/.well-known/mercure`) et `storage` (défaut `localStorage`, `null` pour
+  ne rien conserver).
+- Module interne `core/Realtime` : abonnement Mercure unique pour toute la librairie (`ctx.onConfigChange()` s'appuie
+  dessus).
+- Tests de la librairie (`npm test`, runner natif de Node) exécutés sur le bundle construit, lancés par la CI.
+
+### Fixed
+- Les réponses `application/ld+json` (API Platform) et `application/problem+json` n'étaient pas décodées en objet
+  (renvoyées en texte brut).
+
+---
+
+## [0.4.0] - 2026-11-22
+
+### Added
+- `api.visiteurs.inviter(pseudo)` : crée un visiteur invité (`POST /api/visiteur/invite`) et renvoie
+  `{ visiteur: { id, pseudo, anonyme }, token }` (jeton visiteur `nvv1.…`).
+- `api.visiteurs.moi(token)` : profil du visiteur pour un jeton (`GET /api/visiteur/moi`), 401 si invalide.
+- `api.launches.identify(token, visiteurToken)` et `ctx.identify(visiteurToken)` : rattache le visiteur au
+  lancement (`POST /api/launch/{token}/visiteur`) ; ses événements sont ensuite enregistrés à son nom.
+
+### Changed
+- Les opérations CRUD `api.visiteurs` (`/api/visiteurs`) sont réservées à l'admin côté serveur (401 sinon).
+
+### Deprecated
+- `api.visiteurs.register()` et `api.visiteurs.getByRfid()` : endpoints inexistants, remplacés à terme par le
+  module d'authentification (en ligne / RFID).
+
+---
+
 ## [0.3.0] - 2026-11-21
 
 ### Added

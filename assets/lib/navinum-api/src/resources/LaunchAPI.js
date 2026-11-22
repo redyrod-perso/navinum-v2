@@ -1,4 +1,5 @@
 import { ValidationError } from '../core/Errors.js';
+import { subscribe } from '../core/Realtime.js';
 
 /**
  * Nom du paramètre d'URL portant le jeton de lancement.
@@ -52,6 +53,8 @@ export const LAUNCH_TOKEN_PARAM = 'nv';
  * @property {function(function(Object): void): function(): void} onConfigChange - S'abonne aux
  *           mises à jour de configuration (Mercure) ; retourne la fonction de désabonnement.
  *           Voir {@link LaunchAPI.subscribeConfig}.
+ * @property {function(string): Promise<LaunchVisiteur|null>} identify - Rattache le visiteur
+ *           (jeton `nvv1.…`) à ce lancement et met à jour `visiteur`. Voir {@link LaunchAPI#identify}.
  */
 
 /**
@@ -59,7 +62,8 @@ export const LAUNCH_TOKEN_PARAM = 'nv';
  *
  * Endpoints :
  * - `GET  /api/launch/{token}` : contexte de lancement (404 inconnu, 410 expiré)
- * - `POST /api/launch/{token}/events` : envoi d'un événement (202)
+ * - `POST /api/launch/{token}/visiteur` : rattachement du visiteur (Authorization: Bearer)
+ * - `POST /api/launch/{token}/events` : envoi d’un événement (202)
  *
  * En pratique on utilise le raccourci {@link NavinumAPI#launch}.
  *
@@ -116,41 +120,15 @@ export class LaunchAPI {
      */
     static subscribeConfig(mercure, callback, options = {}) {
         const noop = () => {};
-        const log = options.log || noop;
         const topic = mercure && mercure.topics && mercure.topics.config;
-
         if (!mercure || !mercure.hub || !topic || typeof callback !== 'function') {
             return noop;
         }
-        if (typeof EventSource === 'undefined') {
-            log('EventSource indisponible : pas de mise à jour de configuration en direct');
-            return noop;
-        }
-
-        const separator = mercure.hub.includes('?') ? '&' : '?';
-        const url = `${mercure.hub}${separator}topic=${encodeURIComponent(topic)}`;
-        log('Abonnement Mercure config', url);
-
-        let source = new EventSource(url);
-        source.onmessage = (event) => {
-            let data;
-            try {
-                data = JSON.parse(event.data);
-            } catch (error) {
-                log('Message Mercure illisible, ignoré', event.data);
-                return;
-            }
+        return subscribe(mercure.hub, topic, (data) => {
             if (data && data.config && typeof data.config === 'object') {
                 callback(data.config);
             }
-        };
-
-        return () => {
-            if (source) {
-                source.close();
-                source = null;
-            }
-        };
+        }, { log: options.log, EventSource: options.EventSource });
     }
 
     /**
@@ -210,6 +188,32 @@ export class LaunchAPI {
     }
 
     /**
+     * Rattache un visiteur identifié à ce lancement : ses événements alimenteront ensuite
+     * son `LogVisite` (et sa gamification).
+     *
+     * @param {string} token - Jeton de lancement
+     * @param {string} visiteurToken - Jeton visiteur (`nvv1.…`), obtenu par {@link VisiteurAPI#inviter}
+     *        ou, plus tard, par le module d'authentification (compte en ligne, badge RFID)
+     * @returns {Promise<Object>} Le contexte de lancement à jour (avec `visiteur`)
+     * @throws {ValidationError} Si le jeton visiteur est vide
+     * @throws {UnauthorizedError} Si le jeton visiteur est invalide (401)
+     * @throws {NotFoundError} Si le jeton de lancement est inconnu (404)
+     * @throws {GoneError} Si le jeton de lancement a expiré (410)
+     * @throws {NavinumAPIError} 409 si le lancement appartient déjà à un autre visiteur
+     *
+     * @example
+     * await api.launches.identify('abc123', 'nvv1.…');
+     */
+    async identify(token, visiteurToken) {
+        if (!visiteurToken || typeof visiteurToken !== 'string') {
+            throw new ValidationError('Jeton visiteur manquant', { visiteurToken: 'requis' });
+        }
+        return this.client.post(`${this.tokenPath(token)}/visiteur`, {}, {
+            headers: { Authorization: `Bearer ${visiteurToken}` }
+        });
+    }
+
+    /**
      * Résout un jeton et retourne le contexte de lancement enrichi d'une méthode `track()`.
      *
      * @param {string|null} [token] - Jeton explicite ; à défaut, lu dans `?nv=` de l'URL courante
@@ -231,7 +235,7 @@ export class LaunchAPI {
 
         const data = await this.get(effectiveToken);
 
-        return {
+        const ctx = {
             token: effectiveToken,
             interactif: data?.interactif ?? null,
             parcours: data?.parcours ?? null,
@@ -245,8 +249,15 @@ export class LaunchAPI {
                 data?.mercure ?? null,
                 callback,
                 { log: (...args) => this.client.config.log(...args) }
-            )
+            ),
+            identify: async (visiteurToken) => {
+                const updated = await this.identify(effectiveToken, visiteurToken);
+                ctx.visiteur = updated?.visiteur ?? null;
+                return ctx.visiteur;
+            }
         };
+
+        return ctx;
     }
 }
 

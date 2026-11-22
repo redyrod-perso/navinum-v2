@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Entity\LaunchToken;
 use App\Repository\LaunchTokenRepository;
 use App\Service\LaunchService;
+use App\Service\VisiteurToken;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,6 +15,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * API de lancement des interactifs.
  *
  * - GET  /api/launch/{token}         contexte : interactif, parcours, exposition, config fusionnée, visiteur
+ * - POST /api/launch/{token}/visiteur rattache le visiteur (Authorization: Bearer <jeton visiteur>)
  * - POST /api/launch/{token}/events  événement {type, payload} → consigné dans LogVisite
  *
  * Codes : 404 jeton inconnu, 410 jeton expiré, 400 requête invalide.
@@ -24,6 +26,7 @@ final class LaunchController extends AbstractController
     public function __construct(
         private readonly LaunchTokenRepository $tokens,
         private readonly LaunchService $launch,
+        private readonly VisiteurToken $visiteurTokens,
     ) {
     }
 
@@ -33,6 +36,29 @@ final class LaunchController extends AbstractController
         $launchToken = $this->tokens->findOneByToken($token);
         if ($error = $this->tokenError($launchToken)) {
             return $error;
+        }
+
+        return $this->json($this->launch->context($launchToken));
+    }
+
+    /**
+     * Rattache le visiteur identifié (Authorization: Bearer <jeton visiteur>) à ce lancement :
+     * ses événements alimenteront ensuite son LogVisite (et sa gamification).
+     * 401 jeton visiteur invalide, 409 lancement déjà rattaché à un autre visiteur.
+     */
+    #[Route('/visiteur', name: 'identify', methods: ['POST'])]
+    public function identify(string $token, Request $request): JsonResponse
+    {
+        $launchToken = $this->tokens->findOneByToken($token);
+        if ($error = $this->tokenError($launchToken)) {
+            return $error;
+        }
+        $visiteur = $this->visiteurTokens->fromRequest($request);
+        if (null === $visiteur) {
+            return $this->json(['error' => 'Jeton visiteur absent ou invalide'], 401);
+        }
+        if (!$this->launch->identify($launchToken, $visiteur)) {
+            return $this->json(['error' => 'Ce lancement est déjà rattaché à un autre visiteur'], 409);
         }
 
         return $this->json($this->launch->context($launchToken));
