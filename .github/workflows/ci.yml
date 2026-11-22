@@ -96,6 +96,9 @@ jobs:
       - name: Dépendances
         run: npm ci
 
+      - name: Tests de la librairie (sur le bundle construit)
+        run: npm run build:dev && npm test
+
       - name: Build de la librairie
         run: npm run build
 
@@ -114,3 +117,7 @@ jobs:
             for (const f of ['../../../public/quiz/navinum.json']) JSON.parse(fs.readFileSync(f, 'utf8'));
             console.log('Quiz et manifeste valides');
           "
+
+      - name: Les interactifs passent uniquement par la librairie (pas de fetch/EventSource/localStorage directs)
+        working-directory: .
+        run: bin/check-interactifs.sh

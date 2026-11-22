@@ -112,6 +112,9 @@ npm run watch          # Watch mode pour développement
 # Documentation
 npm run doc:reminder   # Afficher le rappel de documentation
 
+# Tests (runner natif de Node, sur le bundle construit)
+npm run build:dev && npm test
+
 # Copier le build dans public
 cp dist/navinum-api.js ../../../public/build/
 
@@ -143,8 +146,9 @@ make sessions-reset-api  # Réinitialiser via API
 `.github/workflows/ci.yml`, à chaque push sur `main` et chaque pull request (ne fusionner une PR que si tout est vert) :
 - **Symfony** (PHP 8.4 + PostgreSQL 16) : `composer install`, lint YAML/Twig/conteneur, migrations depuis une base vide,
   `doctrine:schema:validate`, PHPUnit.
-- **Librairie JS et quiz** (Node 22) : `npm ci`, build, vérification que `public/build/navinum-api.js` correspond au build
-  (sinon : `npm run build` puis copier `dist/navinum-api.min.js`), syntaxe JSX du quiz, manifestes JSON valides.
+- **Librairie JS et quiz** (Node 22) : `npm ci`, **tests de la librairie** (`npm test`), build, vérification que
+  `public/build/navinum-api.js` correspond au build (sinon : `npm run build` puis copier `dist/navinum-api.min.js`),
+  syntaxe JSX du quiz, manifestes JSON valides, **aucun appel direct dans les interactifs** (`bin/check-interactifs.sh`).
 - Un clone neuf doit suffire : toute variable d'environnement utilisée doit avoir une valeur par défaut dans `.env`.
 
 
@@ -204,7 +208,11 @@ src/
 
 ### Frontend JavaScript
 
-- **Navinum API Client**: TOUJOURS utiliser la librairie pour les appels API
+- **Navinum API Client** : la librairie `@navinum/api` est le **seul point d'accès d'un interactif à Navinum**
+  (API REST, temps réel Mercure, identification, lancement, manifeste). C'est une librairie indépendante, partagée
+  avec les développeurs tiers, sur le même modèle que le futur module d'authentification.
+  **Interdit dans un interactif** : `fetch`, `new EventSource`, `XMLHttpRequest`, `localStorage`/`sessionStorage`
+  directs. Vérifié par `bin/check-interactifs.sh` (CI) ; un besoin manquant → l'ajouter à la librairie (avec tests).
 - React: Functional components avec hooks (useState, useEffect)
 - Naming: camelCase pour variables/fonctions, PascalCase pour composants
 - Async/await pour les appels asynchrones
@@ -293,6 +301,23 @@ api.visiteurs.getByRfid()
 // RFID
 api.rfid.scan()
 api.rfid.associate()
+
+// Groupes de visiteurs (quiz : identifiant de session commun)
+api.rfidGroupes.list()
+api.rfidGroupes.findOrCreate()
+api.rfidGroupes.onCreated()          // temps réel (Mercure)
+
+// Sessions en temps réel
+api.sessions.subscribe()             // Mercure, relecture de l'état à la connexion
+
+// Identification du joueur
+api.visiteurs.identifier()           // visiteur conservé sur l'appareil ou nouvel invité
+api.visiteurs.courant()
+api.visiteurs.oublier()
+
+// Lancement et manifeste
+api.launch()                         // ctx.track(), ctx.identify(), ctx.onConfigChange()
+api.interactifs.chargerManifeste()   // { manifest, defaults }
 
 // Log Visites
 api.logVisites.track()
@@ -417,8 +442,8 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
 - `POST /api/visiteur/invite` `{pseudo}` → visiteur invité + **jeton visiteur** `nvv1.<uuid>.<signature>` (HMAC avec
   `APP_SECRET`, sans stockage, sans expiration pour l'instant). `GET /api/visiteur/moi` (Bearer) → profil.
 - `POST /api/launch/{jeton}/visiteur` (Bearer) rattache le visiteur au lancement : ses événements alimentent son `LogVisite`.
-- Côté JS (lib 0.4.0) : `api.visiteurs.inviter(pseudo)`, `api.visiteurs.moi(token)`, `ctx.identify(token)`.
-  Le quiz garde le visiteur dans `localStorage` (`navinum.visiteur`) pour cumuler ses parties.
+- Côté JS (lib 0.5.0) : `api.visiteurs.identifier(pseudo)` (visiteur conservé sur l'appareil, clé `navinum.visiteur`,
+  ou nouvel invité), `courant()`, `oublier()`, puis `ctx.identify(token)`. Le quiz ne touche jamais au stockage lui-même.
 - Le futur **module d'authentification JS** (compte en ligne, **badge RFID** en réseau local) délivrera le même jeton :
   les interactifs n'auront rien à changer. Profil public uniquement (`id`, `pseudo`, `anonyme`), jamais d'email.
 
