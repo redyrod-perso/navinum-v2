@@ -198,10 +198,6 @@ sessions-reset: ## Réinitialise toutes les sessions
 	@rm -rf var/cache/sessions/*.json 2>/dev/null || true
 	@echo "$(GREEN)✅ Sessions réinitialisées$(NC)"
 
-sessions-reset-api: ## Réinitialise les sessions via l'API
-	@echo "$(YELLOW)🔄 Réinitialisation des sessions via API...$(NC)"
-	@curl -X POST http://localhost:$(PORT)/api/sessions/clear -H "Content-Type: application/json" 2>/dev/null || echo "$(RED)❌ Erreur: serveur non accessible$(NC)"
-	@echo ""
 
 ##
 ## 📊 Informations

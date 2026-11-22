@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quiz Interactif - Navinum</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -342,6 +342,61 @@
 
         .disconnect-button:hover {
             background: #c82333;
+        }
+        /* Erreurs décrites par NavinumAPI.erreurs (titre + message + action) */
+        .erreur-bandeau {
+            position: relative;
+            margin-bottom: 20px;
+            padding: 15px 40px 15px 15px;
+            background: #fdecea;
+            border-left: 4px solid #f44336;
+            border-radius: 10px;
+            color: #611a15;
+        }
+
+        .erreur-bandeau strong {
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .erreur-bandeau .erreur-actions {
+            margin-top: 10px;
+        }
+
+        .erreur-bandeau .erreur-actions button,
+        .erreur-bandeau .erreur-fermer {
+            border: none;
+            background: none;
+            color: #611a15;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .erreur-bandeau .erreur-fermer {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            font-size: 1.2em;
+        }
+
+        /* Gains de la partie (XP, médailles) */
+        .gamification {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f3f0ff;
+            border-radius: 10px;
+        }
+
+        .gamification .xp {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #5a3fc0;
+        }
+
+        .gamification ul {
+            list-style: none;
+            margin-top: 10px;
         }
     </style>
 </head>

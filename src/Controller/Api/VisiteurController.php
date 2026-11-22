@@ -34,7 +34,7 @@ final class VisiteurController extends AbstractController
         $data = json_decode($request->getContent(), true);
         $pseudo = \is_array($data) ? trim((string) ($data['pseudo'] ?? '')) : '';
         if (mb_strlen($pseudo) < 2 || mb_strlen($pseudo) > 40) {
-            return $this->json(['error' => 'Le pseudo doit faire entre 2 et 40 caractères'], 400);
+            return $this->json(['error' => 'Le pseudo doit faire entre 2 et 40 caractères', 'code' => 'VALIDATION'], 400);
         }
 
         $visiteur = (new Visiteur())
@@ -52,7 +52,7 @@ final class VisiteurController extends AbstractController
     {
         $visiteur = $this->tokens->fromRequest($request);
         if (null === $visiteur) {
-            return $this->json(['error' => 'Jeton visiteur absent ou invalide'], 401);
+            return $this->json(['error' => 'Jeton visiteur absent ou invalide', 'code' => 'NON_IDENTIFIE'], 401);
         }
 
         return $this->json(['visiteur' => self::profile($visiteur)]);

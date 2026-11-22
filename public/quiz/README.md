@@ -191,11 +191,11 @@ Quitter une session
 
 ### Utilitaires
 
-#### `POST /api/session/{sessionId}/reset`
-Réinitialiser une session spécifique
+#### `POST /api/session/{sessionId}/reset` (administration)
+Réinitialiser une session spécifique — réservé à `ROLE_ADMIN`
 
-#### `POST /api/sessions/clear`
-Supprimer toutes les sessions
+#### `POST /api/sessions/clear` (administration)
+Supprimer toutes les sessions — réservé à `ROLE_ADMIN` ; en local, utiliser `make sessions-reset`
 
 **Response:**
 ```json
@@ -287,23 +287,8 @@ make status
 # Réinitialiser toutes les sessions (fichiers)
 make sessions-reset
 
-# Réinitialiser toutes les sessions (API)
-make sessions-reset-api
-
 # Nettoyer le cache complet
 make clean
-```
-
-### Via cURL
-
-```bash
-# Réinitialiser toutes les sessions
-curl -X POST http://localhost:8002/api/sessions/clear \
-  -H "Content-Type: application/json"
-
-# Réinitialiser la session globale
-curl -X POST http://localhost:8002/api/session/global/reset \
-  -H "Content-Type: application/json"
 ```
 
 ### Manuellement
@@ -330,7 +315,7 @@ mkdir -p var/cache/sessions
 
 1. Vérifier que tous utilisent la même URL
 2. Vérifier que le serveur est démarré : `make status`
-3. Réinitialiser les sessions : `make sessions-reset-api`
+3. Réinitialiser les sessions : `make sessions-reset`
 
 ### Le quiz ne démarre pas
 

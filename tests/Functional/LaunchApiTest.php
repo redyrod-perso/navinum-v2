@@ -61,10 +61,12 @@ class LaunchApiTest extends WebTestCase
     {
         $this->client->request('GET', '/api/launch/'.str_repeat('a', 48));
         $this->assertResponseStatusCodeSame(404);
+        $this->assertSame('LIEN_INVALIDE', json_decode($this->client->getResponse()->getContent(), true)['code']);
 
         $expired = $this->token('-1 minute');
         $this->client->request('GET', '/api/launch/'.$expired->getToken());
         $this->assertResponseStatusCodeSame(410);
+        $this->assertSame('LIEN_EXPIRE', json_decode($this->client->getResponse()->getContent(), true)['code']);
     }
 
     public function testEvenementsConsignesDansLogVisite(): void

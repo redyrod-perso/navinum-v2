@@ -3,30 +3,50 @@ const { useState, useEffect, useRef } = React;
 // Client Navinum : SEUL point d'accès du quiz à Navinum (API, temps réel Mercure, identification).
 // Aucun fetch / EventSource / localStorage direct dans un interactif (vérifié par la CI).
 const api = new NavinumAPI({
-    debug: true,
+    // Journal détaillé en local uniquement (ou avec ?debug dans l'URL)
+    debug: ['localhost', '127.0.0.1'].includes(window.location.hostname) || /[?&]debug\b/.test(window.location.search),
     // Hub Mercure : celui du site par défaut ; config.js peut en indiquer un autre
     mercureHub: window.APP_CONFIG?.MERCURE_PUBLIC_URL
 });
 
-// Référence aux classes d'erreur
-const { NotFoundError, GoneError } = NavinumAPI;
+// Module d'erreurs de la librairie : code stable, titre, message, action conseillée (aucun affichage)
+const { erreurs } = NavinumAPI;
+const { NotFoundError } = NavinumAPI;
+
+// Toutes les erreurs d'API sont journalisées au même endroit
+api.onError(info => console.warn(`[Quiz] Erreur API ${info.code} :`, info.message));
 
 /**
- * Identifie le joueur (visiteur Navinum conservé sur l'appareil, ou nouvel invité) et rattache
- * la partie lancée par Navinum à son visiteur. Jamais bloquant : la partie continue sans.
+ * Connecte le joueur avec le module d'authentification (mode invité : visiteur conservé sur
+ * l'appareil ou nouvel invité). La librairie rattache elle-même la partie lancée par Navinum.
+ * Jamais bloquant : la partie continue sans identification.
  */
 async function identifyPlayer(pseudo) {
     try {
-        const visiteur = await api.visiteurs.identifier(pseudo);
-        if (launchContext) {
-            await launchContext.identify(visiteur.token);
-        }
-        console.log('[Quiz] Joueur identifié :', visiteur.pseudo, visiteur.id);
-        return visiteur;
+        const joueur = await api.auth.connecter({ pseudo });
+        console.log('[Quiz] Joueur identifié :', joueur.pseudo, joueur.id, joueur.rattache ? '(partie rattachée)' : '');
+        return joueur;
     } catch (err) {
-        console.warn('[Quiz] Identification impossible, la partie continue sans :', err);
+        console.warn('[Quiz] Identification impossible, la partie continue sans :', erreurs.decrire(err).message);
         return null;
     }
+}
+
+/** Bandeau d'erreur : présentation propre au quiz d'une erreur décrite par NavinumAPI.erreurs. */
+function BandeauErreur({ info, onClose, onRetry }) {
+    if (!info) return null;
+    return (
+        <div className="erreur-bandeau" role="alert">
+            <button className="erreur-fermer" onClick={onClose} aria-label="Fermer">×</button>
+            <strong>{info.titre}</strong>
+            <span>{info.message}</span>
+            {info.reessayable && onRetry && (
+                <div className="erreur-actions">
+                    <button onClick={onRetry}>↻ Réessayer</button>
+                </div>
+            )}
+        </div>
+    );
 }
 
 // Manifeste de l'interactif : son configSchema porte les valeurs par défaut
@@ -43,12 +63,15 @@ let manifestDefaults = {};
 
 /**
  * Envoie un événement à Navinum, uniquement si le quiz a été lancé avec un jeton.
- * Les erreurs sont journalisées sans interrompre le jeu.
+ * Rend la réponse (dont `gamification`), ou null ; les erreurs n'interrompent jamais le jeu.
  */
 function track(type, payload = {}) {
-    if (!launchContext) return;
-    launchContext.track(type, payload)
-        .catch(err => console.warn(`[Quiz] Événement ${type} non envoyé:`, err));
+    if (!launchContext) return Promise.resolve(null);
+    return launchContext.track(type, payload)
+        .catch(err => {
+            console.warn(`[Quiz] Événement ${type} non envoyé:`, err);
+            return null;
+        });
 }
 
 /**
@@ -135,6 +158,28 @@ function QuizApp() {
     const [showResult, setShowResult] = useState(false);
     const [winner, setWinner] = useState(null);
     const [notification, setNotification] = useState(null);
+    // Erreur affichée (décrite par NavinumAPI.erreurs) et action « Réessayer » associée
+    const [erreur, setErreur] = useState(null);
+    const retryRef = useRef(null);
+    const [busy, setBusy] = useState(false);
+    // Gains de la partie (XP, médailles), renvoyés par Navinum à la fin
+    const [gains, setGains] = useState(null);
+
+    const afficherErreur = (err, retry = null) => {
+        retryRef.current = retry;
+        setErreur(erreurs.decrire(err));
+    };
+    const fermerErreur = () => {
+        retryRef.current = null;
+        setErreur(null);
+    };
+    const bandeauErreur = (
+        <BandeauErreur
+            info={erreur}
+            onClose={fermerErreur}
+            onRetry={retryRef.current ? () => { const retry = retryRef.current; fermerErreur(); retry(); } : null}
+        />
+    );
 
     // Charger la configuration (jeton Navinum ou défauts du manifeste) et les thèmes
     useEffect(() => {
@@ -148,14 +193,14 @@ function QuizApp() {
                     console.log('[Quiz] Lancé par Navinum:', ctx.interactif, ctx.parcours);
                     if (ctx.visiteur && !ctx.visiteur.anonyme && ctx.visiteur.pseudo) {
                         setPlayerName(ctx.visiteur.pseudo);
-                    } else if (api.visiteurs.courant()?.pseudo) {
-                        setPlayerName(api.visiteurs.courant().pseudo); // joueur déjà venu sur ce navigateur
+                    } else if (api.auth.joueur()?.pseudo) {
+                        setPlayerName(api.auth.joueur().pseudo); // joueur déjà venu sur ce navigateur
                     }
                 } else {
                     console.log('[Quiz] Mode autonome : configuration par défaut de navinum.json');
                 }
                 if (config.themes.length === 0) {
-                    setConfigError('Aucun thème configuré pour ce quiz.');
+                    setConfigError(erreurs.decrire(erreurs.creer('VALIDATION', 'Aucun thème configuré pour ce quiz.')));
                     return;
                 }
                 setThemes(config.themes.map(t => ({ id: t.id, libelle: t.libelle })));
@@ -176,13 +221,8 @@ function QuizApp() {
             })
             .catch(err => {
                 console.error('Erreur chargement configuration:', err);
-                if (err instanceof GoneError) {
-                    setConfigError('Ce lien a expiré. Relancez le quiz depuis Navinum.');
-                } else if (err instanceof NotFoundError) {
-                    setConfigError('Lien de lancement invalide.');
-                } else {
-                    setConfigError('Impossible de charger la configuration du quiz : ' + err.message);
-                }
+                // Lien expiré / invalide, réseau… : message du module d'erreurs
+                setConfigError(erreurs.decrire(err));
             });
         return () => {
             cancelled = true;
@@ -233,6 +273,7 @@ function QuizApp() {
             });
         } else if (stage === 'finished') {
             const startedAt = gameRef.current.startedAt;
+            setGains(null);
             track('quiz.completed', {
                 theme: selectedTheme,
                 score: gameRef.current.score,
@@ -241,7 +282,7 @@ function QuizApp() {
                 victoire: winner !== null && winner === playerName,
                 joueurs: players.length,
                 duree: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null
-            });
+            }).then(res => setGains(res && res.gamification ? res.gamification : null));
         }
     }, [stage]);
 
@@ -263,8 +304,8 @@ function QuizApp() {
         api.rfidGroupes.list()
             .then(groupes => setExistingGroups(groupes))
             .catch(err => {
-                console.error('Erreur chargement groupes:', err);
                 setExistingGroups([]);
+                afficherErreur(err, loadGroups);
             });
     };
 
@@ -288,14 +329,17 @@ function QuizApp() {
 
     // Session en temps réel (Mercure) : la librairie relit l'état à chaque (re)connexion
     // puis transmet chaque changement (joueurs, démarrage, scores).
+    // Suivi aussi après la fin : le tableau final reçoit les scores des joueurs qui finissent après nous.
     useEffect(() => {
-        if (!sessionId || (stage !== 'lobby' && stage !== 'playing')) {
+        if (!sessionId || !['lobby', 'playing', 'finished'].includes(stage)) {
             return;
         }
         console.log(`[Session] Suivi en temps réel de ${sessionId}`);
 
         return api.sessions.subscribe(sessionId, session => {
-            setPlayers(session.players || []);
+            const sessionPlayers = session.players || [];
+            // Après la fin, les joueurs partis restent affichés avec leur score
+            if (stage !== 'finished') setPlayers(sessionPlayers);
 
             // Le leader a démarré le quiz
             if (stage === 'lobby' && session.status === 'playing' && session.theme) {
@@ -303,16 +347,48 @@ function QuizApp() {
                 loadQuestionsAndStart(session.theme);
             }
 
-            // Scores en direct
-            if (stage === 'playing' && session.players) {
-                const newScores = {};
-                session.players.forEach(player => {
-                    newScores[player.name] = player.score;
+            // Scores en direct (fusion : un joueur parti garde son dernier score)
+            if (stage !== 'lobby') {
+                setScores(prev => {
+                    const next = { ...prev };
+                    sessionPlayers.forEach(player => {
+                        // Notre score : jamais en dessous du score local (l'état relu peut précéder
+                        // l'enregistrement de notre dernière bonne réponse)
+                        next[player.name] = player.name === playerName
+                            ? Math.max(gameRef.current.score, player.score || 0)
+                            : player.score;
+                    });
+                    return next;
                 });
-                setScores(newScores);
             }
-        }, { onError: err => console.warn('[Session] Relecture de l’état impossible :', err) });
+
+            // Un autre joueur a tout bon : il gagne, la partie se termine pour tout le groupe
+            // (après notre fin, on affiche seulement le gagnant)
+            if (stage === 'finished' && questions.length > 0) {
+                const gagnant = sessionPlayers.find(p => p.score >= questions.length);
+                if (gagnant) setWinner(prev => prev || gagnant.name);
+            }
+            if (stage === 'playing' && questions.length > 0) {
+                const gagnant = sessionPlayers.find(p => p.name !== playerName && p.score >= questions.length);
+                if (gagnant) {
+                    if (gameRef.current.nextTimeout) {
+                        clearTimeout(gameRef.current.nextTimeout);
+                        gameRef.current.nextTimeout = null;
+                    }
+                    setWinner(gagnant.name);
+                    setStage('finished');
+                }
+            }
+        }, { onError: err => console.warn('[Session] Relecture de l’état impossible :', erreurs.decrire(err).message) });
     }, [sessionId, stage]);
+
+    // Page fermée ou rechargée dans le lobby ou en partie : quitter le groupe (pas de joueur fantôme)
+    useEffect(() => {
+        if (!sessionId || !playerName || (stage !== 'lobby' && stage !== 'playing')) {
+            return;
+        }
+        return api.sessions.quitterEnPartant(sessionId, { playerName });
+    }, [sessionId, playerName, stage]);
 
     const showNotification = (message) => {
         setNotification(message);
@@ -325,8 +401,7 @@ function QuizApp() {
         const config = configRef.current;
         const theme = config && config.themes.find(t => t.id === themeId);
         if (!theme) {
-            console.error('Thème introuvable dans la configuration:', themeId);
-            alert('Erreur : thème "' + themeId + '" introuvable');
+            afficherErreur(erreurs.creer('INTROUVABLE', `Le thème « ${themeId} » n’existe plus dans la configuration du quiz.`));
             return;
         }
 
@@ -344,121 +419,92 @@ function QuizApp() {
         setSelectedAnswer(null);
         setShowResult(false);
         setWinner(null);
+        setGains(null);
+        setScores({});
         setTimeLeft(config.tempsParQuestion);
         setSelectedTheme(themeId);
         setStage('playing');
     };
 
     const joinGlobalSession = async () => {
-        if (!playerName.trim()) {
-            alert('Veuillez entrer votre nom');
+        if (busy) return; // double clic : une seule tentative à la fois
+        const nom = playerName.trim();
+        const groupe = groupName.trim(); // le nom du groupe sert d'identifiant de session
+        if (!nom) {
+            afficherErreur(erreurs.creer('VALIDATION', 'Veuillez entrer votre nom.'));
+            return;
+        }
+        if (!groupe) {
+            afficherErreur(erreurs.creer('VALIDATION', 'Veuillez choisir ou créer un groupe.'));
             return;
         }
 
-        if (!groupName.trim()) {
-            alert('Veuillez entrer le nom du groupe');
-            return;
-        }
-
+        fermerErreur();
+        setBusy(true);
+        setPlayerName(nom);
         try {
-            // Normaliser le nom du groupe pour l'utiliser comme sessionId
-            const normalizedGroupName = groupName.trim();
-
             // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
-            await identifyPlayer(playerName.trim());
+            await identifyPlayer(nom);
 
-            // 0. Vérifier que le groupe n'est pas complet (joueursMax)
+            // 0. Groupe complet ? (joueursMax de la configuration)
             try {
-                const existing = await api.sessions.get(normalizedGroupName);
+                const existing = await api.sessions.get(groupe);
                 const existingPlayers = (existing && existing.session && existing.session.players) || [];
-                const alreadyIn = existingPlayers.some(p => p.name === playerName);
+                const alreadyIn = existingPlayers.some(p => p.name === nom);
                 if (!alreadyIn && existingPlayers.length >= config.joueursMax) {
-                    alert(`Ce groupe est complet (${config.joueursMax} joueurs maximum)`);
-                    return;
+                    throw erreurs.creer('GROUPE_COMPLET', `Ce groupe est complet (${config.joueursMax} joueurs maximum) : choisissez-en un autre.`);
                 }
             } catch (err) {
-                // 404 : la session n'existe pas encore, elle sera créée plus bas
-                if (!(err instanceof NotFoundError)) {
-                    console.warn('Vérification du nombre de joueurs impossible:', err);
-                }
+                // Session pas encore créée : elle le sera plus bas
+                if (!erreurs.est(err, 'SESSION_INTROUVABLE', 'INTROUVABLE')) throw err;
             }
 
-            // 1. Retrouver le groupe par son nom, ou le créer (via la librairie Navinum)
-            try {
-                const groupe = await api.rfidGroupes.findOrCreate(normalizedGroupName);
-                console.log('Groupe :', groupe.nom);
-            } catch (err) {
-                console.error('Erreur gestion groupe :', err);
-                alert('Erreur lors de la gestion du groupe : ' + err.message);
-                return;
-            }
+            // 1. Retrouver le groupe par son nom, ou le créer
+            await api.rfidGroupes.findOrCreate(groupe);
 
-            // 2. Rejoindre ou créer la session avec le nom du groupe comme ID
+            // 2. Rejoindre la session du groupe, ou la créer
             let data;
             try {
-                data = await api.sessions.join(normalizedGroupName, { playerName: playerName });
+                data = await api.sessions.join(groupe, { playerName: nom });
             } catch (err) {
-                // Si la session n'existe pas encore, la créer
-                if (err instanceof NotFoundError) {
-                    data = await api.sessions.create({
-                        playerName: playerName,
-                        sessionId: normalizedGroupName,
-                        rfidGroupeName: normalizedGroupName
-                    });
-                } else {
-                    throw err;
-                }
+                if (!(err instanceof NotFoundError)) throw err;
+                data = await api.sessions.create({ playerName: nom, sessionId: groupe, rfidGroupeName: groupe });
             }
 
             if (!data.session || !data.session.players) {
-                console.error('Réponse invalide:', data);
-                alert('Erreur: Réponse serveur invalide');
-                return;
+                throw erreurs.creer('SERVEUR', 'Réponse inattendue du serveur.');
             }
 
-            setSessionId(normalizedGroupName);
+            setSessionId(groupe);
             setPlayers(data.session.players);
             setStage('lobby');
         } catch (err) {
-            console.error('Erreur jonction session:', err);
-            // Message du serveur (ex. partie déjà en cours dans ce groupe) ou erreur réseau
-            alert(err instanceof NavinumAPI.NetworkError
-                ? 'Connexion au serveur impossible, vérifiez le réseau puis réessayez.'
-                : 'Impossible de rejoindre le groupe : ' + err.message);
+            // Partie en cours, groupe complet, réseau… : titre, message et « Réessayer » si pertinent
+            afficherErreur(err, joinGlobalSession);
+        } finally {
+            setBusy(false);
         }
     };
 
-    const startQuiz = async () => {
+    const startQuiz = () => {
         if (!selectedTheme) {
-            alert('Veuillez sélectionner un thème');
+            afficherErreur(erreurs.creer('VALIDATION', 'Veuillez sélectionner un thème.'));
             return;
         }
+        fermerErreur();
+        showNotification('Démarrage du quiz...');
 
-        try {
-            console.log('[Quiz] Démarrage immédiat du quiz pour le leader...');
-            showNotification('Démarrage du quiz...');
+        // Le leader démarre tout de suite (il connaît le thème) ; les autres joueurs suivent via Mercure
+        loadQuestionsAndStart(selectedTheme);
 
-            // OPTIMISATION : Le leader démarre IMMÉDIATEMENT (pas besoin d'attendre le SSE)
-            // Il connaît déjà le thème qu'il a choisi
-            loadQuestionsAndStart(selectedTheme);
-
-            // En parallèle, notifier les autres joueurs via l'API
-            // Appel non-bloquant pour ne pas ralentir le leader
-            api.sessions.start(sessionId, {
-                theme: selectedTheme,
-                playerName: playerName
-            }).then(() => {
-                console.log('[Quiz] Autres joueurs notifiés via API');
-            }).catch(err => {
-                console.error('[Quiz] Erreur notification API:', err);
-                // Pas grave, le leader est déjà redirigé
-                // Les autres recevront la mise à jour via SSE
+        api.sessions.start(sessionId, { theme: selectedTheme, playerName })
+            .catch(err => {
+                // Démarrage refusé (plus leader, partie déjà lancée…) : le leader revient au lobby, sauf
+                // si la partie a bien démarré (ex. réponse perdue puis nouvelle tentative)
+                if (erreurs.est(err, 'PARTIE_DEMARREE')) return;
+                setStage('lobby');
+                afficherErreur(err);
             });
-
-        } catch (err) {
-            console.error('[Quiz] Erreur inattendue:', err);
-            alert('Erreur lors du démarrage: ' + err.message);
-        }
     };
 
     // answerIndex = null : temps écoulé
@@ -541,7 +587,7 @@ function QuizApp() {
         setStage('home');
         setSelectedTheme(null);
         // Conserver le pseudo du visiteur Navinum s'il est connu
-        const visiteur = (launchContext && launchContext.visiteur) || api.visiteurs.courant();
+        const visiteur = (launchContext && launchContext.visiteur) || api.auth.joueur();
         setPlayerName(visiteur && visiteur.pseudo ? visiteur.pseudo : '');
         setGroupName('');
         setSessionId('');
@@ -552,6 +598,7 @@ function QuizApp() {
         setSelectedAnswer(null);
         setShowResult(false);
         setWinner(null);
+        setGains(null);
     };
 
     const restart = () => {
@@ -564,7 +611,13 @@ function QuizApp() {
             <div className="quiz-container">
                 <h1>🎯 Quiz Interactif</h1>
                 <div className="session-info">
-                    <strong>{configError}</strong>
+                    <strong>{configError.titre}</strong>
+                    <p>{configError.message}</p>
+                    {configError.reessayable && (
+                        <button className="start-button" style={{ marginTop: '15px' }} onClick={() => window.location.reload()}>
+                            ↻ Réessayer
+                        </button>
+                    )}
                 </div>
             </div>
         );
@@ -584,6 +637,7 @@ function QuizApp() {
             <div className="quiz-container">
                 <h1>🎯 Quiz Interactif</h1>
                 {configNoticeEl}
+                {bandeauErreur}
                 <h2>Bienvenue !</h2>
 
                 <div className="input-group">
@@ -593,7 +647,7 @@ function QuizApp() {
                         value={playerName}
                         onChange={(e) => setPlayerName(e.target.value)}
                         placeholder="Entrez votre nom"
-                        onKeyPress={(e) => e.key === 'Enter' && (groupMode === 'select' ? document.getElementById('groupSelect').focus() : document.getElementById('groupNameInput').focus())}
+                        onKeyDown={(e) => e.key === 'Enter' && (groupMode === 'select' ? document.getElementById('groupSelect').focus() : document.getElementById('groupNameInput').focus())}
                     />
                 </div>
 
@@ -645,11 +699,11 @@ function QuizApp() {
                                 fontSize: '1em',
                                 cursor: 'pointer'
                             }}
-                            onKeyPress={(e) => e.key === 'Enter' && joinGlobalSession()}
+                            onKeyDown={(e) => e.key === 'Enter' && joinGlobalSession()}
                         >
                             <option value="">-- Choisir un groupe --</option>
-                            {existingGroups.map((group, index) => (
-                                <option key={index} value={group.nom}>
+                            {existingGroups.map(group => (
+                                <option key={group.id || group.nom} value={group.nom}>
                                     {group.nom}
                                 </option>
                             ))}
@@ -661,13 +715,13 @@ function QuizApp() {
                             value={groupName}
                             onChange={(e) => setGroupName(e.target.value)}
                             placeholder="Entrez le nom du nouveau groupe"
-                            onKeyPress={(e) => e.key === 'Enter' && joinGlobalSession()}
+                            onKeyDown={(e) => e.key === 'Enter' && joinGlobalSession()}
                         />
                     )}
                 </div>
 
-                <button className="start-button" onClick={joinGlobalSession}>
-                    Rejoindre le lobby
+                <button className="start-button" onClick={joinGlobalSession} disabled={busy}>
+                    {busy ? 'Connexion…' : 'Rejoindre le lobby'}
                 </button>
             </div>
         );
@@ -700,12 +754,13 @@ function QuizApp() {
                 </div>
 
                 {configNoticeEl}
+                {bandeauErreur}
 
                 <div className="lobby-players">
                     <h2>Joueurs connectés ({players.length}/{config.joueursMax})</h2>
                     <ul className="players-list">
-                        {players.map((player, index) => (
-                            <li key={index} className="player-item">
+                        {players.map(player => (
+                            <li key={player.name} className="player-item">
                                 <span className="player-icon">{player.isLeader ? '👑' : '👤'}</span>
                                 <span className="player-name">{player.name}</span>
                                 {player.isLeader && <span className="you-badge" style={{background: '#ffa500'}}>Leader</span>}
@@ -782,8 +837,8 @@ function QuizApp() {
                 </div>
 
                 <div className="score-board">
-                    {players.map((player, index) => (
-                        <div key={index} className="player-score">
+                    {players.map(player => (
+                        <div key={player.name} className="player-score">
                             <div className="name">
                                 👤 {player.name}
                                 {player.name === playerName && ' (Vous)'}
@@ -792,6 +847,8 @@ function QuizApp() {
                         </div>
                     ))}
                 </div>
+
+                {bandeauErreur}
 
                 <div className="progress-bar">
                     <div className="progress-fill" style={{ width: `${progress}%` }}></div>
@@ -855,9 +912,25 @@ function QuizApp() {
                     </div>
                 )}
 
+                {gains && (gains.xp.length > 0 || gains.medailles.length > 0) && (
+                    <div className="gamification">
+                        {gains.xp.length > 0 && (
+                            <div className="xp">+{gains.xp.reduce((total, gain) => total + gain.points, 0)} XP</div>
+                        )}
+                        <div>Total : {gains.totalXp} XP</div>
+                        {gains.medailles.length > 0 && (
+                            <ul>
+                                {gains.medailles.map(medaille => (
+                                    <li key={medaille.libelle} title={medaille.description || ''}>🏅 Nouvelle médaille : <strong>{medaille.libelle}</strong></li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                )}
+
                 <div className="score-board">
-                    {players.map((player, index) => (
-                        <div key={index} className="player-score">
+                    {players.map(player => (
+                        <div key={player.name} className="player-score">
                             <div className="name">
                                 👤 {player.name}
                                 {player.name === playerName && ' (Vous)'}

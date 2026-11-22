@@ -9,6 +9,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Mercure\HubInterface;
 use Symfony\Component\Mercure\Update;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * Sessions de quiz multijoueur.
@@ -25,6 +26,9 @@ class SessionController extends AbstractController
     public const ABANDON_DELAY = 15 * 60;
 
     private const PARTIE_EN_COURS = 'Une partie est en cours dans ce groupe : attendez la fin ou choisissez un autre groupe.';
+
+    /** Longueur maximale d'un identifiant de session (nom du groupe). */
+    public const ID_MAX = 100;
 
     public function __construct(
         private readonly HubInterface $hub,
@@ -47,9 +51,29 @@ class SessionController extends AbstractController
         return $path;
     }
 
+    /**
+     * Fichier d'une session : nom dérivé d'un hachage de l'identifiant (le nom du groupe, saisi par
+     * les joueurs), pour que n'importe quel nom reste un simple fichier du dossier des sessions.
+     */
+    private function sessionFile(string $sessionId): string
+    {
+        return $this->getSessionsPath().'/'.hash('sha256', $sessionId).'.json';
+    }
+
+    private static function isValidId(string $sessionId): bool
+    {
+        return '' !== trim($sessionId) && mb_strlen($sessionId) <= self::ID_MAX && !preg_match('/[\x00-\x1f]/', $sessionId);
+    }
+
+    /** Réponse d'erreur avec un code métier stable, lu par la librairie (`NavinumAPI.erreurs`). */
+    private static function error(string $message, string $code, int $status): JsonResponse
+    {
+        return new JsonResponse(['error' => $message, 'code' => $code], $status);
+    }
+
     private function getSession(string $sessionId): ?array
     {
-        $file = $this->getSessionsPath() . '/' . $sessionId . '.json';
+        $file = $this->sessionFile($sessionId);
         if (!file_exists($file)) {
             return null;
         }
@@ -71,7 +95,7 @@ class SessionController extends AbstractController
 
     private function deleteSession(string $sessionId): void
     {
-        $file = $this->getSessionsPath().'/'.$sessionId.'.json';
+        $file = $this->sessionFile($sessionId);
         if (is_file($file)) {
             unlink($file);
         }
@@ -80,7 +104,7 @@ class SessionController extends AbstractController
     private function saveSession(string $sessionId, array $session): void
     {
         $session['lastUpdate'] = time();
-        $file = $this->getSessionsPath() . '/' . $sessionId . '.json';
+        $file = $this->sessionFile($sessionId);
         file_put_contents($file, json_encode($session));
     }
 
@@ -110,11 +134,14 @@ class SessionController extends AbstractController
         $rfidGroupeName = $data['rfidGroupeName'] ?? null;
 
         if (!$playerName) {
-            return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
+            return self::error('Nom du joueur manquant', 'VALIDATION', 400);
         }
 
         // Utiliser un ID personnalisé ou générer un ID de session unique
         $sessionId = $customSessionId ?: substr(md5(uniqid('quiz_', true)), 0, 8);
+        if (!\is_string($sessionId) || !self::isValidId($sessionId)) {
+            return self::error(\sprintf('Nom de groupe invalide (1 à %d caractères).', self::ID_MAX), 'SESSION_INVALIDE', 400);
+        }
 
         // Vérifier si la session existe déjà (pour les sessions personnalisées)
         $existingSession = $this->getSession($sessionId);
@@ -149,7 +176,7 @@ class SessionController extends AbstractController
 
             // Partie réellement en cours : ne pas l'écraser
             if (!$this->isOver($existingSession)) {
-                return new JsonResponse(['error' => self::PARTIE_EN_COURS], 409);
+                return self::error(self::PARTIE_EN_COURS, 'PARTIE_EN_COURS', 409);
             }
             // Partie terminée ou abandonnée : on repart sur un nouveau lobby (ci-dessous)
         }
@@ -189,17 +216,17 @@ class SessionController extends AbstractController
         $playerName = $data['playerName'] ?? null;
 
         if (!$playerName) {
-            return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
+            return self::error('Nom du joueur manquant', 'VALIDATION', 400);
         }
 
         $session = $this->getSession($sessionId);
         if (!$session) {
-            return new JsonResponse(['error' => 'Session non trouvée'], 404);
+            return self::error('Session non trouvée', 'SESSION_INTROUVABLE', 404);
         }
 
         if ($session['status'] !== 'lobby') {
             if (!$this->isOver($session)) {
-                return new JsonResponse(['error' => self::PARTIE_EN_COURS], 409);
+                return self::error(self::PARTIE_EN_COURS, 'PARTIE_EN_COURS', 409);
             }
             // Partie terminée ou abandonnée : nouveau lobby, le joueur qui arrive en devient le leader
             $session = [
@@ -245,7 +272,7 @@ class SessionController extends AbstractController
     {
         $session = $this->getSession($sessionId);
         if (!$session) {
-            return new JsonResponse(['error' => 'Session non trouvée'], 404);
+            return self::error('Session non trouvée', 'SESSION_INTROUVABLE', 404);
         }
 
         return new JsonResponse(['session' => $session]);
@@ -258,12 +285,12 @@ class SessionController extends AbstractController
         $playerName = $data['playerName'] ?? null;
 
         if (!$playerName) {
-            return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
+            return self::error('Nom du joueur manquant', 'VALIDATION', 400);
         }
 
         $session = $this->getSession($sessionId);
         if (!$session) {
-            return new JsonResponse(['error' => 'Session non trouvée'], 404);
+            return self::error('Session non trouvée', 'SESSION_INTROUVABLE', 404);
         }
 
         // Retirer le joueur de la session
@@ -292,19 +319,19 @@ class SessionController extends AbstractController
         return new JsonResponse(['status' => 'ok', 'session' => $session]);
     }
 
+    /** Maintenance : réservée à l'administration. */
     #[Route('/api/session/{sessionId}/reset', name: 'api_session_reset', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function resetSession(string $sessionId): JsonResponse
     {
-        $file = $this->getSessionsPath() . '/' . $sessionId . '.json';
-
-        if (file_exists($file)) {
-            unlink($file);
-        }
+        $this->deleteSession($sessionId);
 
         return new JsonResponse(['status' => 'ok', 'message' => 'Session réinitialisée']);
     }
 
+    /** Maintenance : réservée à l'administration (en local : `make sessions-reset`). */
     #[Route('/api/sessions/clear', name: 'api_sessions_clear', methods: ['POST'])]
+    #[IsGranted('ROLE_ADMIN')]
     public function clearAllSessions(): JsonResponse
     {
         $path = $this->getSessionsPath();
@@ -333,27 +360,25 @@ class SessionController extends AbstractController
         $playerName = $data['playerName'] ?? null;
 
         if (!$theme) {
-            return new JsonResponse(['error' => 'Thème manquant'], 400);
+            return self::error('Thème manquant', 'VALIDATION', 400);
         }
 
         if (!$playerName) {
-            return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
+            return self::error('Nom du joueur manquant', 'VALIDATION', 400);
         }
 
         $session = $this->getSession($sessionId);
         if (!$session) {
-            return new JsonResponse(['error' => 'Session non trouvée'], 404);
+            return self::error('Session non trouvée', 'SESSION_INTROUVABLE', 404);
         }
 
         if ($session['status'] !== 'lobby') {
-            return new JsonResponse(['error' => 'Le quiz a déjà commencé'], 400);
+            return self::error('Le quiz a déjà commencé', 'PARTIE_DEMARREE', 409);
         }
 
         // Vérifier que le joueur est bien le leader
         if (!isset($session['leader']) || $session['leader'] !== $playerName) {
-            return new JsonResponse([
-                'error' => 'Seul le leader du groupe peut démarrer le quiz'
-            ], 403);
+            return self::error('Seul le leader du groupe peut démarrer le quiz', 'NON_LEADER', 403);
         }
 
         // Démarrer le quiz
@@ -375,12 +400,12 @@ class SessionController extends AbstractController
         $score = $data['score'] ?? 0;
 
         if (!$playerName) {
-            return new JsonResponse(['error' => 'Nom du joueur manquant'], 400);
+            return self::error('Nom du joueur manquant', 'VALIDATION', 400);
         }
 
         $session = $this->getSession($sessionId);
         if (!$session) {
-            return new JsonResponse(['error' => 'Session non trouvée'], 404);
+            return self::error('Session non trouvée', 'SESSION_INTROUVABLE', 404);
         }
 
         // Mettre à jour le score du joueur

@@ -58,10 +58,10 @@ final class LaunchController extends AbstractController
         }
         $visiteur = $this->visiteurTokens->fromRequest($request);
         if (null === $visiteur) {
-            return $this->json(['error' => 'Jeton visiteur absent ou invalide'], 401);
+            return $this->json(['error' => 'Jeton visiteur absent ou invalide', 'code' => 'NON_IDENTIFIE'], 401);
         }
         if (!$this->launch->identify($launchToken, $visiteur)) {
-            return $this->json(['error' => 'Ce lancement est déjà rattaché à un autre visiteur'], 409);
+            return $this->json(['error' => 'Ce lancement est déjà rattaché à un autre visiteur', 'code' => 'DEJA_RATTACHE'], 409);
         }
 
         return $this->json($this->launch->context($launchToken));
@@ -78,14 +78,14 @@ final class LaunchController extends AbstractController
         $body = json_decode($request->getContent(), true);
         $type = \is_array($body) ? ($body['type'] ?? null) : null;
         if (!\is_string($type) || !preg_match('/^[a-z0-9_.-]{1,64}$/i', $type)) {
-            return $this->json(['error' => 'Champ "type" obligatoire (lettres, chiffres, . _ -, 64 max)'], 400);
+            return $this->json(['error' => 'Champ "type" obligatoire (lettres, chiffres, . _ -, 64 max)', 'code' => 'VALIDATION'], 400);
         }
         $payload = $body['payload'] ?? [];
         if (!\is_array($payload)) {
-            return $this->json(['error' => 'Le champ "payload" doit être un objet'], 400);
+            return $this->json(['error' => 'Le champ "payload" doit être un objet', 'code' => 'VALIDATION'], 400);
         }
         if (\strlen(json_encode($payload)) > 65536) {
-            return $this->json(['error' => 'Payload trop volumineux (64 Ko max)'], 400);
+            return $this->json(['error' => 'Payload trop volumineux (64 Ko max)', 'code' => 'VALIDATION'], 400);
         }
 
         $log = $this->launch->recordEvent($launchToken, $type, $payload);
@@ -109,10 +109,10 @@ final class LaunchController extends AbstractController
     private function tokenError(?LaunchToken $token): ?JsonResponse
     {
         if (null === $token) {
-            return $this->json(['error' => 'Jeton de lancement inconnu'], 404);
+            return $this->json(['error' => 'Jeton de lancement inconnu', 'code' => 'LIEN_INVALIDE'], 404);
         }
         if ($token->isExpired()) {
-            return $this->json(['error' => 'Jeton de lancement expiré'], 410);
+            return $this->json(['error' => 'Jeton de lancement expiré', 'code' => 'LIEN_EXPIRE'], 410);
         }
 
         return null;
