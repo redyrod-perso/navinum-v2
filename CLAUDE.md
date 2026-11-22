@@ -136,6 +136,16 @@ make sessions-reset-api  # Réinitialiser via API
 - Lancer les tests sur la base **dédiée** `navinum_test` : dans le conteneur, `DATABASE_URL` l'emporte sur `.env.test`
   (`docker exec -e APP_ENV=test -e DATABASE_URL=…/navinum_test navinum_app php bin/phpunit`).
 - Sécurité par défaut : une ressource API est fermée (`ROLE_ADMIN`) tant qu'on n'a pas décidé de l'ouvrir.
+- La suite PHPUnit doit sortir en **code 0** : `phpunit.dist.xml` échoue sur toute dépréciation, notice ou avertissement.
+
+### Intégration continue (GitHub Actions)
+
+`.github/workflows/ci.yml`, à chaque push sur `main` et chaque pull request (ne fusionner une PR que si tout est vert) :
+- **Symfony** (PHP 8.4 + PostgreSQL 16) : `composer install`, lint YAML/Twig/conteneur, migrations depuis une base vide,
+  `doctrine:schema:validate`, PHPUnit.
+- **Librairie JS et quiz** (Node 22) : `npm ci`, build, vérification que `public/build/navinum-api.js` correspond au build
+  (sinon : `npm run build` puis copier `dist/navinum-api.min.js`), syntaxe JSX du quiz, manifestes JSON valides.
+- Un clone neuf doit suffire : toute variable d'environnement utilisée doit avoir une valeur par défaut dans `.env`.
 
 
 ### Backend PHP/Symfony

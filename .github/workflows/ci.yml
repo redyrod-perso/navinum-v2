@@ -1,0 +1,115 @@
+# Intégration continue Navinum
+# À chaque push sur main et à chaque pull request : la PR ne doit être fusionnée que si tout est vert.
+# Règle du projet : « un bug = un nouveau test » (voir CLAUDE.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  symfony:
+    name: Symfony (PHP 8.4, PostgreSQL 16)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: navinum
+          POSTGRES_PASSWORD: navinumV2
+          POSTGRES_DB: navinum_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U navinum -d navinum_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # .env.test pointe déjà sur 127.0.0.1:5432/navinum_test (le service ci-dessus)
+      APP_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, intl, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Dépendances
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Lint (YAML, Twig, conteneur)
+        run: |
+          php bin/console lint:yaml config --parse-tags
+          php bin/console lint:twig templates
+          php bin/console lint:container
+
+      - name: Migrations depuis une base vide
+        run: php bin/console doctrine:migrations:migrate --no-interaction
+
+      - name: Schéma conforme aux entités
+        run: php bin/console doctrine:schema:validate
+
+      - name: Tests PHPUnit
+        run: php bin/phpunit
+
+  front:
+    name: Librairie JS et quiz
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: assets/lib/navinum-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: assets/lib/navinum-api/package-lock.json
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Build de la librairie
+        run: npm run build
+
+      - name: Le bundle publié (public/build) correspond aux sources
+        run: |
+          if ! cmp -s dist/navinum-api.min.js ../../../public/build/navinum-api.js; then
+            echo "::error::public/build/navinum-api.js n'est pas à jour : lancer npm run build puis le copier (voir CLAUDE.md)"
+            exit 1
+          fi
+
+      - name: Syntaxe du quiz (JSX) et manifestes JSON
+        run: |
+          node -e "
+            const fs = require('fs');
+            require('@babel/parser').parse(fs.readFileSync('../../../public/quiz/app.jsx', 'utf8'), { sourceType: 'script', plugins: ['jsx'] });
+            for (const f of ['../../../public/quiz/navinum.json']) JSON.parse(fs.readFileSync(f, 'utf8'));
+            console.log('Quiz et manifeste valides');
+          "
