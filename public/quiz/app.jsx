@@ -421,7 +421,10 @@ function QuizApp() {
             setStage('lobby');
         } catch (err) {
             console.error('Erreur jonction session:', err);
-            alert('Erreur de connexion au serveur: ' + err.message);
+            // Message du serveur (ex. partie déjà en cours dans ce groupe) ou erreur réseau
+            alert(err instanceof NavinumAPI.NetworkError
+                ? 'Connexion au serveur impossible, vérifiez le réseau puis réessayez.'
+                : 'Impossible de rejoindre le groupe : ' + err.message);
         }
     };
 

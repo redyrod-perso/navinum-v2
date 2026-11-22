@@ -21,6 +21,11 @@ class SessionController extends AbstractController
 {
     private const SESSIONS_DIR = '/var/cache/sessions';
 
+    /** Une partie sans activité depuis ce délai est considérée comme abandonnée (le groupe est libéré). */
+    public const ABANDON_DELAY = 15 * 60;
+
+    private const PARTIE_EN_COURS = 'Une partie est en cours dans ce groupe : attendez la fin ou choisissez un autre groupe.';
+
     public function __construct(
         private readonly HubInterface $hub,
         private readonly LoggerInterface $logger,
@@ -49,6 +54,27 @@ class SessionController extends AbstractController
             return null;
         }
         return json_decode(file_get_contents($file), true);
+    }
+
+    /**
+     * Partie terminée ou abandonnée : plus en lobby, et soit plus aucun joueur, soit plus d'activité depuis
+     * ABANDON_DELAY. Le groupe peut alors repartir sur un nouveau lobby.
+     */
+    private function isOver(array $session): bool
+    {
+        if ('lobby' === ($session['status'] ?? null)) {
+            return false;
+        }
+
+        return [] === ($session['players'] ?? []) || (time() - ($session['lastUpdate'] ?? 0)) > self::ABANDON_DELAY;
+    }
+
+    private function deleteSession(string $sessionId): void
+    {
+        $file = $this->getSessionsPath().'/'.$sessionId.'.json';
+        if (is_file($file)) {
+            unlink($file);
+        }
     }
 
     private function saveSession(string $sessionId, array $session): void
@@ -120,6 +146,12 @@ class SessionController extends AbstractController
                     'session' => $existingSession
                 ]);
             }
+
+            // Partie réellement en cours : ne pas l'écraser
+            if (!$this->isOver($existingSession)) {
+                return new JsonResponse(['error' => self::PARTIE_EN_COURS], 409);
+            }
+            // Partie terminée ou abandonnée : on repart sur un nouveau lobby (ci-dessous)
         }
 
         // Créer une nouvelle session
@@ -165,9 +197,24 @@ class SessionController extends AbstractController
             return new JsonResponse(['error' => 'Session non trouvée'], 404);
         }
 
-        // Vérifier si le quiz a déjà commencé
         if ($session['status'] !== 'lobby') {
-            return new JsonResponse(['error' => 'Le quiz a déjà commencé'], 400);
+            if (!$this->isOver($session)) {
+                return new JsonResponse(['error' => self::PARTIE_EN_COURS], 409);
+            }
+            // Partie terminée ou abandonnée : nouveau lobby, le joueur qui arrive en devient le leader
+            $session = [
+                'id' => $sessionId,
+                'rfidGroupeName' => $session['rfidGroupeName'] ?? null,
+                'leader' => $playerName,
+                'status' => 'lobby',
+                'theme' => null,
+                'players' => [['name' => $playerName, 'score' => 0, 'joinedAt' => time(), 'isLeader' => true]],
+                'createdAt' => time(),
+            ];
+            $this->saveSession($sessionId, $session);
+            $this->notifySessionUpdate($sessionId);
+
+            return new JsonResponse(['session' => $this->getSession($sessionId)]);
         }
 
         // Vérifier si le joueur existe déjà
@@ -223,6 +270,21 @@ class SessionController extends AbstractController
         $session['players'] = array_values(array_filter($session['players'], function($player) use ($playerName) {
             return $player['name'] !== $playerName;
         }));
+
+        // Plus personne : la session est supprimée, le groupe est libre pour une nouvelle partie
+        if ([] === $session['players']) {
+            $this->deleteSession($sessionId);
+
+            return new JsonResponse(['status' => 'ok', 'session' => null]);
+        }
+
+        // Le leader est parti : le joueur arrivé le plus tôt prend le relais
+        if (($session['leader'] ?? null) === $playerName) {
+            $session['leader'] = $session['players'][0]['name'];
+            foreach ($session['players'] as $i => $player) {
+                $session['players'][$i]['isLeader'] = 0 === $i;
+            }
+        }
 
         $this->saveSession($sessionId, $session);
         $this->notifySessionUpdate($sessionId);

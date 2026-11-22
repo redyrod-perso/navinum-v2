@@ -7,6 +7,17 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.5.1] - 2026-11-23
+
+### Fixed
+- Les erreurs renvoyées par le serveur perdaient leur message : seule une propriété `message` était lue, alors que
+  Navinum renvoie `{ error }` et API Platform `{ detail }`. Le message réel est désormais transmis
+  (ex. « Une partie est en cours dans ce groupe… » au lieu de « Données invalides »).
+- 422 (validation API Platform) traité comme `ValidationError` ; pour les autres codes (409, 403…), le code HTTP est
+  disponible dans `error.status`.
+
+---
+
 ## [0.5.0] - 2026-11-22
 
 La librairie devient le **seul point d'accès** des interactifs à Navinum : API, temps réel, identification.
