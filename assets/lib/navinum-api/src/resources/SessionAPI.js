@@ -11,6 +11,44 @@ export class SessionAPI extends BaseResource {
     }
 
     /**
+     * Chemin d'une session : l'identifiant (nom du groupe) est encodé (espaces, `?`, `#`, accents…).
+     * @param {string} sessionId
+     * @returns {string}
+     * @private
+     */
+    path(sessionId) {
+        if (!sessionId) {
+            throw new ValidationError('Identifiant de session manquant', { sessionId: 'requis' });
+        }
+        return `/api/session/${encodeURIComponent(sessionId)}`;
+    }
+
+    /**
+     * Quitte la session quand la page est fermée ou rechargée (requête `keepalive`, envoyée même
+     * si la page disparaît) : le joueur ne reste pas « fantôme » dans le lobby.
+     *
+     * @param {string} sessionId - Identifiant de la session
+     * @param {Object} data - { playerName }
+     * @returns {function(): void} Fonction de retrait (à appeler quand le joueur quitte normalement)
+     *
+     * @example
+     * const stop = api.sessions.quitterEnPartant('Classe 4B', { playerName: 'Léa' });
+     * // départ normal :
+     * stop(); await api.sessions.leave('Classe 4B', { playerName: 'Léa' });
+     */
+    quitterEnPartant(sessionId, data) {
+        if (typeof window === 'undefined' || !window.addEventListener) {
+            return () => {};
+        }
+        const path = `${this.path(sessionId)}/leave`;
+        const onPageHide = () => {
+            this.client.executeRequest('POST', path, data, { keepalive: true }).catch(() => {});
+        };
+        window.addEventListener('pagehide', onPageHide);
+        return () => window.removeEventListener('pagehide', onPageHide);
+    }
+
+    /**
      * Crée une nouvelle session ou rejoint une session existante
      * @param {Object} data - { playerName, sessionId? }
      */
@@ -24,7 +62,7 @@ export class SessionAPI extends BaseResource {
      * @param {Object} data - { playerName }
      */
     async join(sessionId, data) {
-        return this.client.post(`/api/session/${sessionId}/join`, data);
+        return this.client.post(`${this.path(sessionId)}/join`, data);
     }
 
     /**
@@ -33,7 +71,7 @@ export class SessionAPI extends BaseResource {
      * @param {Object} data - { playerName }
      */
     async leave(sessionId, data) {
-        return this.client.post(`/api/session/${sessionId}/leave`, data);
+        return this.client.post(`${this.path(sessionId)}/leave`, data);
     }
 
     /**
@@ -42,7 +80,7 @@ export class SessionAPI extends BaseResource {
      * @param {Object} data - { theme }
      */
     async start(sessionId, data) {
-        return this.client.post(`/api/session/${sessionId}/start`, data);
+        return this.client.post(`${this.path(sessionId)}/start`, data);
     }
 
     /**
@@ -51,7 +89,7 @@ export class SessionAPI extends BaseResource {
      * @param {Object} data - { playerName, score }
      */
     async updateScore(sessionId, data) {
-        return this.client.post(`/api/session/${sessionId}/score`, data);
+        return this.client.post(`${this.path(sessionId)}/score`, data);
     }
 
     /**
@@ -59,7 +97,7 @@ export class SessionAPI extends BaseResource {
      * @param {string} sessionId - Identifiant de la session
      */
     async reset(sessionId) {
-        return this.client.post(`/api/session/${sessionId}/reset`);
+        return this.client.post(`${this.path(sessionId)}/reset`);
     }
 
     /**
@@ -74,7 +112,7 @@ export class SessionAPI extends BaseResource {
      * @param {string} sessionId - Identifiant de la session
      */
     async get(sessionId) {
-        return this.client.get(`/api/session/${sessionId}`);
+        return this.client.get(this.path(sessionId));
     }
 
     /**

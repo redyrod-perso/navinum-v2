@@ -19,6 +19,8 @@ import { RfidAPI } from './resources/RfidAPI.js';
 import { RfidGroupeAPI } from './resources/RfidGroupeAPI.js';
 import { LogVisiteAPI } from './resources/LogVisiteAPI.js';
 import { LaunchAPI, LAUNCH_TOKEN_PARAM } from './resources/LaunchAPI.js';
+import { Erreurs, erreurs, CODES, ACTIONS } from './modules/Erreurs.js';
+import { Auth } from './modules/Auth.js';
 
 /**
  * Navinum API Client
@@ -62,6 +64,28 @@ export class NavinumAPI {
         this.rfidGroupes = new RfidGroupeAPI(this.client);
         this.logVisites = new LogVisiteAPI(this.client);
         this.launches = new LaunchAPI(this.client);
+
+        // Modules
+        /** Gestion des erreurs (voir {@link Erreurs}) ; aussi accessible par `NavinumAPI.erreurs`. */
+        this.erreurs = erreurs;
+        /** Authentification des joueurs (voir {@link Auth}). */
+        this.auth = new Auth(this);
+        /** Dernier contexte de lancement résolu par {@link NavinumAPI#launch} (null en mode autonome). */
+        this.contexte = null;
+    }
+
+    /**
+     * Appelle `callback` pour chaque erreur d'API (après les nouvelles tentatives), décrite par le
+     * module d'erreurs : journalisation, télémétrie… Aucun affichage.
+     *
+     * @param {function(ErreurDecrite): void} callback
+     * @returns {function(): void} Fonction de retrait
+     *
+     * @example
+     * api.onError(info => console.warn(`[${info.code}]`, info.message));
+     */
+    onError(callback) {
+        return this.client.addErrorListener(error => callback(erreurs.decrire(error)));
     }
 
     /**
@@ -92,7 +116,8 @@ export class NavinumAPI {
      * }
      */
     async launch(token) {
-        return this.launches.resolve(token);
+        this.contexte = await this.launches.resolve(token);
+        return this.contexte;
     }
 
     /**
@@ -150,6 +175,9 @@ NavinumAPI.NotFoundError = NotFoundError;
 NavinumAPI.GoneError = GoneError;
 NavinumAPI.LAUNCH_TOKEN_PARAM = LAUNCH_TOKEN_PARAM;
 NavinumAPI.ServerError = ServerError;
+NavinumAPI.erreurs = erreurs;
+NavinumAPI.Erreurs = Erreurs;
+NavinumAPI.Auth = Auth;
 
 // Export des erreurs pour utilisation externe
 export {
@@ -161,7 +189,12 @@ export {
     GoneError,
     ServerError,
     LaunchAPI,
-    RfidGroupeAPI
+    RfidGroupeAPI,
+    Erreurs,
+    erreurs,
+    CODES,
+    ACTIONS,
+    Auth
 };
 
 // Export par défaut

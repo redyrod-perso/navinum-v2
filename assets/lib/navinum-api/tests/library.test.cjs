@@ -32,7 +32,7 @@ function fakeFetch(routes) {
             status: route.status,
             headers: { get: (h) => (h.toLowerCase() === 'content-type' ? contentType : null) },
             json: async () => route.body,
-            text: async () => JSON.stringify(route.body),
+            text: async () => (typeof route.body === 'string' ? route.body : JSON.stringify(route.body)),
         };
     };
     fn.calls = calls;
@@ -246,4 +246,134 @@ test('le message d’erreur du serveur est transmis (et non remplacé par « Don
     const doublon = await api.rfidGroupes.create('Classe').catch((e) => e);
     assert.ok(doublon instanceof NavinumAPI.ValidationError);
     assert.match(doublon.message, /existe déjà/);
+});
+
+// --- Module d'erreurs --------------------------------------------------------------------------
+
+test('erreurs.decrire : un code stable par cas (réseau, 401, 404, 409, 410, 422, 500, inconnu)', async () => {
+    const api = makeApi({
+        'GET /api/r401': { status: 401, body: { error: 'Jeton visiteur absent ou invalide' } },
+        'GET /api/r404': { status: 404, body: 'introuvable', contentType: 'text/html' },
+        'GET /api/r409': { status: 409, body: { error: 'Conflit quelconque' } },
+        'GET /api/r410': { status: 410, body: { error: 'Jeton de lancement expiré' } },
+        'GET /api/r422': { status: 422, contentType: 'application/problem+json', body: { detail: 'nom: obligatoire', violations: [{ propertyPath: 'nom' }] } },
+        'GET /api/r500': { status: 500, body: '' , contentType: 'text/plain' },
+        'GET /api/reseau': { throw: new TypeError('Failed to fetch') },
+    });
+    const decrire = async (p) => NavinumAPI.erreurs.decrire(await api.client.get(p).catch((e) => e));
+
+    const reseau = await decrire('/api/reseau');
+    assert.equal(reseau.code, 'RESEAU');
+    assert.equal(reseau.reessayable, true);
+    assert.equal(reseau.action, 'REESSAYER');
+    assert.match(reseau.message, /ne répond pas/);
+
+    assert.equal((await decrire('/api/r401')).code, 'NON_IDENTIFIE');
+    assert.equal((await decrire('/api/r401')).action, 'SE_RECONNECTER');
+    const introuvable = await decrire('/api/r404');
+    assert.equal(introuvable.code, 'INTROUVABLE');
+    assert.equal(introuvable.status, 404);
+    assert.equal(introuvable.message, 'introuvable', 'texte court du serveur conservé');
+    assert.equal((await decrire('/api/r409')).code, 'CONFLIT');
+    assert.equal((await decrire('/api/r409')).message, 'Conflit quelconque');
+    const expire = await decrire('/api/r410');
+    assert.equal(expire.code, 'LIEN_EXPIRE');
+    assert.equal(expire.action, 'RELANCER');
+    const invalide = await decrire('/api/r422');
+    assert.equal(invalide.code, 'VALIDATION');
+    assert.equal(invalide.status, 422);
+    assert.equal(invalide.message, 'nom: obligatoire');
+    assert.deepEqual(invalide.details, [{ propertyPath: 'nom' }]);
+    const serveur = await decrire('/api/r500');
+    assert.equal(serveur.code, 'SERVEUR');
+    assert.match(serveur.message, /problème/);
+
+    const inconnu = NavinumAPI.erreurs.decrire(new Error('boum'));
+    assert.equal(inconnu.code, 'INCONNU');
+    assert.equal(NavinumAPI.erreurs.decrire('texte').code, 'INCONNU');
+});
+
+test('erreurs : le code métier du serveur est prioritaire ; creer() et est()', async () => {
+    const api = makeApi({
+        'POST /api/session/G/join': { status: 409, body: { error: 'Une partie est en cours dans ce groupe.', code: 'PARTIE_EN_COURS' } },
+        'GET /api/launch/x': { status: 404, body: { error: 'Jeton de lancement inconnu', code: 'LIEN_INVALIDE' } },
+    });
+    const err = await api.sessions.join('G', { playerName: 'Ana' }).catch((e) => e);
+    assert.equal(err.code, 'PARTIE_EN_COURS');
+    const info = NavinumAPI.erreurs.decrire(err);
+    assert.equal(info.titre, 'Partie en cours');
+    assert.equal(info.action, 'CHOISIR_AUTRE_GROUPE');
+    assert.equal(NavinumAPI.erreurs.decrire(await api.launches.get('x').catch((e) => e)).code, 'LIEN_INVALIDE');
+
+    const complet = NavinumAPI.erreurs.creer('GROUPE_COMPLET', 'Ce groupe est complet (8 joueurs maximum).');
+    assert.ok(NavinumAPI.erreurs.est(complet, 'GROUPE_COMPLET', 'PARTIE_EN_COURS'));
+    assert.equal(NavinumAPI.erreurs.decrire(complet).message, 'Ce groupe est complet (8 joueurs maximum).');
+    assert.equal(NavinumAPI.erreurs.decrire(NavinumAPI.erreurs.creer('GROUPE_COMPLET')).message, NavinumAPI.erreurs.codes.GROUPE_COMPLET.message);
+    assert.equal(NavinumAPI.erreurs.decrire({ code: 'PAS_UNE_ERREUR' }).code, 'INCONNU');
+});
+
+test('api.onError : appelé une fois par erreur (après les tentatives), jamais bloquant', async () => {
+    const api = makeApi({ 'GET /api/x': { status: 500, body: { error: 'oups' } } }, { retryAttempts: 2, retryDelay: 1 });
+    const vus = [];
+    const stop = api.onError((info) => vus.push(info.code));
+    api.onError(() => { throw new Error('écouteur cassé'); });
+    await assert.rejects(() => api.client.get('/api/x'), NavinumAPI.ServerError);
+    assert.deepEqual(vus, ['SERVEUR']);
+    stop();
+    await api.client.get('/api/x').catch(() => {});
+    assert.deepEqual(vus, ['SERVEUR']);
+});
+
+// --- Sessions : identifiants encodés -------------------------------------------------------------
+
+test('sessions : le nom du groupe est encodé dans l’URL (?, #, /)', async () => {
+    const api = makeApi({ 'POST /api/session/Salle ?#1/join': { status: 200, body: { session: { players: [] } } } });
+    await api.sessions.join('Salle ?#1', { playerName: 'Ana' });
+    assert.equal(fetch.calls[0].path, '/api/session/Salle ?#1/join');
+    assert.equal(fetch.calls[0].search, '');
+});
+
+// --- Module d'authentification -----------------------------------------------------------------
+
+test('auth.connecter (invité) : jeton visiteur, rattachement au lancement, onChange, deconnecter', async () => {
+    const token = 'b'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 200, body: { visiteur: { id: 'v1', pseudo: 'Léa', anonyme: true } } },
+        'POST /api/visiteur/invite': (call) => ({ status: 201, body: { visiteur: { id: 'v1', pseudo: call.body.pseudo, anonyme: true }, token: 'nvv1.v1.sig' } }),
+    });
+    assert.deepEqual(api.auth.modes(), ['invite']);
+    const ctx = await api.launch(token);
+    const changements = [];
+    api.auth.onChange((j) => changements.push(j && j.pseudo));
+
+    const joueur = await api.auth.connecter({ pseudo: 'Léa' });
+    assert.equal(joueur.token, 'nvv1.v1.sig');
+    assert.equal(joueur.mode, 'invite');
+    assert.equal(joueur.rattache, true);
+    assert.equal(ctx.visiteur.id, 'v1', 'partie rattachée au joueur');
+    assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv1.v1.sig');
+    assert.equal(api.auth.joueur().pseudo, 'Léa');
+
+    api.auth.deconnecter();
+    assert.equal(api.auth.joueur(), null);
+    assert.deepEqual(changements, ['Léa', null]);
+});
+
+test('auth : rattachement refusé non bloquant ; modes à venir et personnalisés', async () => {
+    const api = makeApi({
+        'POST /api/visiteur/invite': { status: 201, body: { visiteur: { id: 'v1', pseudo: 'Tom' }, token: 't' } },
+    });
+    const lancement = { identify: async () => { throw new Error('409'); } };
+    const joueur = await api.auth.connecter({ pseudo: 'Tom', lancement });
+    assert.equal(joueur.rattache, false);
+
+    const rfid = await api.auth.connecter({ mode: 'rfid' }).catch((e) => e);
+    assert.equal(NavinumAPI.erreurs.decrire(rfid).code, 'MODE_INDISPONIBLE');
+    assert.match(rfid.message, /pas encore disponible/);
+
+    api.auth.ajouterMode('borne', async () => ({ id: 'b', pseudo: 'Borne', anonyme: true, token: 'tb' }));
+    assert.equal((await api.auth.connecter({ mode: 'borne' })).pseudo, 'Borne');
+    api.auth.ajouterMode('casse', async () => ({ id: 'c', pseudo: 'C' }));
+    await assert.rejects(() => api.auth.connecter({ mode: 'casse' }), NavinumAPI.ValidationError);
 });

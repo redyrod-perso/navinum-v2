@@ -15,6 +15,7 @@ Librairie JavaScript complète pour interagir avec les APIs Symfony de Navinum. 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [API Usage](#api-usage)
+- [Authentification des joueurs](#authentification-des-joueurs)
 - [Gestion des erreurs](#gestion-des-erreurs)
 - [Configuration avancée](#configuration-avancée)
 - [Exemples réels](#exemples-réels)
@@ -263,6 +264,19 @@ await api.sessions.clearAll();
 ```
 
 ---
+
+#### Quitter le groupe à la fermeture de la page
+
+```javascript
+// Dans le lobby ou en partie : le joueur quitte le groupe si la page est fermée ou rechargée
+const stop = api.sessions.quitterEnPartant('Classe 4B', { playerName: 'Léa' });
+// départ normal : retirer l'écouteur puis quitter
+stop();
+await api.sessions.leave('Classe 4B', { playerName: 'Léa' });
+```
+
+Les noms de groupe sont encodés dans l'URL (`?`, `#`, espaces, accents…). `reset()` et `clearAll()` sont réservés à
+l'administration.
 
 ### Expositions
 
@@ -641,7 +655,82 @@ console.log('Top interactifs:', stats.topInteractifs);
 
 ---
 
+## Authentification des joueurs
+
+Module `api.auth` : **une seule API pour tous les modes de connexion**. Il rend un joueur et son **jeton visiteur**
+(`nvv1.…`) et, si l'interactif a été lancé par Navinum (`await api.launch()`), **rattache automatiquement la partie**
+au joueur (ses événements alimentent son parcours, ses XP et ses médailles).
+
+```javascript
+const ctx = await api.launch();                              // facultatif (mode autonome : null)
+const joueur = await api.auth.connecter({ pseudo: 'Léa' });  // mode « invite » par défaut
+// { id, pseudo, anonyme: true, token: 'nvv1.…', mode: 'invite', rattache: true }
+
+api.auth.joueur();          // joueur connecté (ou conservé sur l'appareil), sans appel réseau
+api.auth.onChange(j => …);  // connexion / déconnexion ; retourne la fonction de désabonnement
+api.auth.deconnecter();     // « ce n'est pas moi » : oublie le joueur sur l'appareil
+api.auth.modes();           // ['invite']
+```
+
+| Mode | État |
+|------|------|
+| `invite` | Disponible : visiteur invité à partir d'un pseudo, réutilisé sur l'appareil |
+| `compte`, `oauth`, `rfid` | À venir : erreur `MODE_INDISPONIBLE` en attendant |
+| personnalisé | `api.auth.ajouterMode(nom, async (options, api) => ({ id, pseudo, anonyme, token }))` |
+
+Le rattachement de la partie n'est jamais bloquant : en cas d'échec, `joueur.rattache === false` et le joueur reste
+connecté. Le stockage se règle avec l'option `storage` (`localStorage` par défaut, `null` pour ne rien conserver).
+
+---
+
 ## Gestion des erreurs
+
+### Module d'erreurs (recommandé)
+
+`NavinumAPI.erreurs` (ou `api.erreurs`) transforme **n'importe quelle erreur** en description exploitable, **sans
+HTML ni design** : chaque interactif choisit sa présentation.
+
+```javascript
+try {
+    await api.sessions.join('Classe 4B', { playerName: 'Léa' });
+} catch (err) {
+    const info = NavinumAPI.erreurs.decrire(err);
+    // { code: 'PARTIE_EN_COURS', titre: 'Partie en cours',
+    //   message: 'Une partie est en cours dans ce groupe : attendez la fin ou choisissez un autre groupe.',
+    //   reessayable: true, action: 'CHOISIR_AUTRE_GROUPE', status: 409, details: {…}, erreur: err }
+    afficherBandeau(info.titre, info.message, info.reessayable);
+}
+
+NavinumAPI.erreurs.est(err, 'LIEN_EXPIRE', 'LIEN_INVALIDE');               // test par code
+throw NavinumAPI.erreurs.creer('GROUPE_COMPLET', 'Ce groupe est complet.');   // erreur propre à l'interactif
+api.onError(info => console.warn(info.code, info.message));                  // toutes les erreurs d'API (journal, télémétrie)
+```
+
+Le message est celui du serveur quand il en fournit un (en français, plus précis), sinon celui du catalogue.
+Le serveur peut imposer le code : `{ "error": "…", "code": "PARTIE_EN_COURS" }` (contrôleurs de Navinum).
+
+| Code | Cas | Réessayable | Action conseillée |
+|------|-----|:-----------:|-------------------|
+| `RESEAU` | serveur injoignable, timeout | oui | `REESSAYER` |
+| `SERVEUR` | erreur 5xx | oui | `REESSAYER` |
+| `VALIDATION` | données invalides (400, 422) | non | `CORRIGER` |
+| `NON_IDENTIFIE` | jeton visiteur absent ou invalide (401) | non | `SE_RECONNECTER` |
+| `NON_AUTORISE` | action interdite (403) | non | `AUCUNE` |
+| `INTROUVABLE` | ressource inexistante (404) | non | `RECHARGER` |
+| `CONFLIT` | conflit non précisé (409) | oui | `ATTENDRE` |
+| `LIEN_INVALIDE` | jeton de lancement inconnu | non | `RELANCER` |
+| `LIEN_EXPIRE` | jeton de lancement expiré (410) | non | `RELANCER` |
+| `DEJA_RATTACHE` | partie déjà rattachée à un autre visiteur | non | `RELANCER` |
+| `SESSION_INTROUVABLE` | groupe (session) inexistant | non | `CHOISIR_AUTRE_GROUPE` |
+| `SESSION_INVALIDE` | nom de groupe invalide | non | `CORRIGER` |
+| `PARTIE_EN_COURS` | partie en cours dans le groupe | oui | `CHOISIR_AUTRE_GROUPE` |
+| `PARTIE_DEMARREE` | la partie a déjà commencé | non | `AUCUNE` |
+| `GROUPE_COMPLET` | groupe complet | non | `CHOISIR_AUTRE_GROUPE` |
+| `NON_LEADER` | action réservée au leader | non | `AUCUNE` |
+| `MODE_INDISPONIBLE` | mode de connexion pas encore disponible | non | `AUCUNE` |
+| `INCONNU` | tout le reste | oui | `REESSAYER` |
+
+Codes et actions : `NavinumAPI.erreurs.codes`, `NavinumAPI.erreurs.actions`.
 
 ### Classes d'erreurs disponibles
 
@@ -654,6 +743,8 @@ La librairie fournit une hiérarchie d'erreurs pour gérer les différents cas :
 - `NotFoundError` - Ressource introuvable (HTTP 404)
 - `GoneError` - Ressource expirée, ex. jeton de lancement (HTTP 410)
 - `ServerError` - Erreur serveur (HTTP 500+)
+
+Toutes portent `status` (code HTTP réel), `code` (code métier du serveur, ou null) et `body` (corps de la réponse).
 
 ### Accès aux classes d'erreur
 
@@ -1047,7 +1138,11 @@ navinum-api/
 │   ├── core/                   # Composants core
 │   │   ├── ApiClient.js        # Client HTTP avec fetch
 │   │   ├── Config.js           # Gestion configuration
-│   │   └── Errors.js           # Classes d'erreurs
+│   │   ├── Errors.js           # Classes d'erreurs
+│   │   └── Realtime.js         # Abonnements Mercure
+│   ├── modules/                # Modules transverses
+│   │   ├── Auth.js             # Authentification des joueurs (api.auth)
+│   │   └── Erreurs.js          # Gestion des erreurs (NavinumAPI.erreurs)
 │   ├── resources/              # APIs par ressource
 │   │   ├── BaseResource.js     # Classe de base (CRUD)
 │   │   ├── SessionAPI.js       # API Sessions

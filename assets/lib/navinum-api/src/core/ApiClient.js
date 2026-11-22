@@ -16,6 +16,24 @@ export class ApiClient {
         this.config = config;
         this.requestInterceptors = [];
         this.responseInterceptors = [];
+        this.errorListeners = [];
+    }
+
+    /**
+     * Ajoute un écouteur appelé pour chaque erreur levée par une requête (après les tentatives).
+     * @param {function(Error): void} fn
+     * @returns {function(): void} Fonction de retrait
+     */
+    addErrorListener(fn) {
+        this.errorListeners.push(fn);
+        return () => { this.errorListeners = this.errorListeners.filter(l => l !== fn); };
+    }
+
+    /** @private */
+    notifyError(error) {
+        for (const listener of this.errorListeners) {
+            try { listener(error); } catch (e) { /* un écouteur ne doit jamais casser la requête */ }
+        }
     }
 
     /**
@@ -91,24 +109,45 @@ export class ApiClient {
      * Gère les erreurs HTTP : lève l'erreur typée correspondante, avec le message du serveur.
      */
     handleError(status, response) {
+        const error = ApiClient.withBody(ApiClient.errorFor(status, response), response);
+        error.status = status; // ex. 422 et non 400 pour une ValidationError d'API Platform
+        throw error;
+    }
+
+    /**
+     * Attache le corps de la réponse et le code métier éventuel (`code`) à l'erreur.
+     * @private
+     */
+    static withBody(error, response) {
+        error.body = response ?? null;
+        const code = response && typeof response === 'object' ? response.code : null;
+        error.code = typeof code === 'string' && code ? code : null;
+        return error;
+    }
+
+    /**
+     * Erreur typée correspondant à un statut HTTP, avec le message du serveur.
+     * @private
+     */
+    static errorFor(status, response) {
         const message = ApiClient.serverMessage(response);
         switch (status) {
             case 400:
             case 422:
-                throw new ValidationError(message || 'Données invalides', response?.errors || response?.violations || {});
+                return new ValidationError(message || 'Données invalides', response?.errors || response?.violations || {});
             case 401:
-                throw new UnauthorizedError(message || undefined);
+                return new UnauthorizedError(message || undefined);
             case 404:
-                throw new NotFoundError(message || undefined);
+                return new NotFoundError(message || undefined);
             case 410:
-                throw new GoneError(message || undefined);
+                return new GoneError(message || undefined);
             case 500:
             case 502:
             case 503:
-                throw new ServerError(message || 'Erreur serveur', status);
+                return new ServerError(message || 'Erreur serveur', status);
             default:
                 // ex. 409 (conflit : partie déjà en cours…), 403 : message du serveur et code HTTP dans error.status
-                throw new NavinumAPIError(message || `Erreur HTTP ${status}`, status, response);
+                return new NavinumAPIError(message || `Erreur HTTP ${status}`, status, response);
         }
     }
 
@@ -125,6 +164,7 @@ export class ApiClient {
                 await new Promise(resolve => setTimeout(resolve, this.config.retryDelay));
                 return this.requestWithRetry(method, endpoint, data, options, attempt + 1);
             }
+            this.notifyError(error);
             throw error;
         }
     }
@@ -154,17 +194,16 @@ export class ApiClient {
 
         this.config.log(`${method} ${url}`, data);
 
-        try {
-            // Créer un AbortController pour le timeout
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
+        // AbortController pour le timeout (minuteur toujours libéré, même si fetch échoue)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.config.timeout);
 
+        try {
             const response = await fetch(url, {
                 ...requestConfig,
                 signal: controller.signal
             });
 
-            clearTimeout(timeoutId);
 
             this.config.log(`Response ${response.status}:`, response);
 
@@ -199,6 +238,8 @@ export class ApiClient {
             }
 
             throw new NetworkError('Erreur de connexion au serveur', error);
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
 

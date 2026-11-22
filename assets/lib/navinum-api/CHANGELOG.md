@@ -7,6 +7,30 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.6.0] - 2026-11-22
+
+Deux modules transverses pour tous les interactifs : erreurs et authentification.
+
+### Added
+- **Module d'erreurs** `NavinumAPI.erreurs` (aussi `api.erreurs`) : `decrire(err)` → `{ code, titre, message,
+  reessayable, action, status, details, erreur }`, codes stables indépendants des statuts HTTP (`RESEAU`,
+  `LIEN_EXPIRE`, `PARTIE_EN_COURS`, `GROUPE_COMPLET`…), `est(err, ...codes)`, `creer(code, message)`. Aucun affichage.
+- `api.onError(callback)` : appelé pour chaque erreur d'API (après les nouvelles tentatives), avec l'erreur décrite.
+- **Module d'authentification** `api.auth` : `connecter({ mode, pseudo })` (mode `invite` ; `compte`, `oauth`, `rfid`
+  à venir), `joueur()`, `deconnecter()`, `onChange()`, `modes()`, `ajouterMode()`. Rattache automatiquement la partie
+  lancée par `api.launch()` au joueur.
+- `api.sessions.quitterEnPartant(sessionId, { playerName })` : quitte le groupe à la fermeture de la page
+  (requête `keepalive`).
+- Les erreurs portent `code` (code métier du serveur) et `body` (corps de la réponse).
+
+### Fixed
+- Les noms de groupe contenant `?`, `#` ou `%` cassaient les URL de session : ils sont désormais encodés.
+- Le minuteur de timeout n'était pas libéré quand `fetch` échouait (process Node maintenu 30 s, minuteurs inutiles
+  dans le navigateur).
+- `error.status` vaut le statut HTTP réel (ex. 422 et non 400 pour une `ValidationError` d'API Platform).
+
+---
+
 ## [0.5.1] - 2026-11-23
 
 ### Fixed

@@ -7,6 +7,10 @@ export class NavinumAPIError extends Error {
         this.name = 'NavinumAPIError';
         this.status = status;
         this.response = response;
+        /** Code métier stable envoyé par le serveur (`{ "error": "…", "code": "PARTIE_EN_COURS" }`), ou null. */
+        this.code = null;
+        /** Corps brut de la réponse d'erreur du serveur, ou null. */
+        this.body = null;
         this.timestamp = new Date().toISOString();
     }
 
@@ -18,6 +22,7 @@ export class NavinumAPIError extends Error {
             name: this.name,
             message: this.message,
             status: this.status,
+            code: this.code,
             timestamp: this.timestamp
         };
     }
