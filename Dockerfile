@@ -1,4 +1,4 @@
-FROM dunglas/frankenphp:1.11.1-builder-php8.4.17
+FROM dunglas/frankenphp:1.11.2-builder-php8.4.17
 
 # Installer git
 RUN apt-get update && apt-get install -y \
