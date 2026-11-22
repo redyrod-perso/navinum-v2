@@ -127,7 +127,6 @@ chmod +x .git/hooks/pre-commit
 
 ```bash
 make sessions-reset      # Réinitialiser les sessions
-make sessions-reset-api  # Réinitialiser via API
 ```
 
 ## Code Style
@@ -319,6 +318,13 @@ api.visiteurs.oublier()
 api.launch()                         // ctx.track(), ctx.identify(), ctx.onConfigChange()
 api.interactifs.chargerManifeste()   // { manifest, defaults }
 
+// Modules transverses
+api.auth.connecter({ pseudo })       // joueur + jeton visiteur, partie lancée rattachée automatiquement
+api.auth.joueur() / deconnecter()
+NavinumAPI.erreurs.decrire(err)      // { code, titre, message, reessayable, action, … } — aucun affichage
+api.onError(info => …)               // toutes les erreurs d'API (journal)
+api.sessions.quitterEnPartant()      // quitte le groupe à la fermeture de la page
+
 // Log Visites
 api.logVisites.track()
 api.logVisites.getByVisiteur()
@@ -388,7 +394,12 @@ try {
 }
 ```
 
-Types d'erreurs: `NetworkError`, `ValidationError`, `UnauthorizedError`, `NotFoundError`, `ServerError`
+Types d'erreurs: `NetworkError`, `ValidationError`, `UnauthorizedError`, `NotFoundError`, `GoneError`, `ServerError`
+
+**Recommandé dans les interactifs : le module d'erreurs** (`NavinumAPI.erreurs.decrire(err)`), qui rend un **code
+stable** (`RESEAU`, `LIEN_EXPIRE`, `PARTIE_EN_COURS`, `GROUPE_COMPLET`…), un titre et un message en français et
+l'action conseillée. Côté Symfony, toute réponse d'erreur d'API destinée aux interactifs porte `{ "error": "…",
+"code": "…" }` avec un code du catalogue (`assets/lib/navinum-api/src/modules/Erreurs.js`).
 
 ## Interactifs
 
@@ -411,7 +422,11 @@ Types d'erreurs: `NetworkError`, `ValidationError`, `UnauthorizedError`, `NotFou
 - `POST /api/session/{id}/start` - Démarrer
 - `GET /api/session/{id}` - État session (lecture initiale)
 - `POST /api/session/{id}/score` - Mettre à jour score
-- `POST /api/session/{id}/leave` - Quitter
+- `POST /api/session/{id}/leave` - Quitter (aussi à la fermeture de la page : `api.sessions.quitterEnPartant()`)
+- `POST /api/session/{id}/reset`, `POST /api/sessions/clear` - maintenance, **réservées à `ROLE_ADMIN`**
+
+Les sessions sont des fichiers de `var/cache/sessions/` nommés par un hachage du nom du groupe (tout nom saisi reste
+un simple fichier de ce dossier, 100 caractères max).
 
 **Temps réel :** chaque changement de session est publié sur le hub Mercure intégré, topic
 `/navinum/sessions/{id}` (`{"type": "session", "session": {…}}`). Le quiz s'y abonne avec `EventSource` et relit l'état
@@ -442,7 +457,8 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
 - `POST /api/visiteur/invite` `{pseudo}` → visiteur invité + **jeton visiteur** `nvv1.<uuid>.<signature>` (HMAC avec
   `APP_SECRET`, sans stockage, sans expiration pour l'instant). `GET /api/visiteur/moi` (Bearer) → profil.
 - `POST /api/launch/{jeton}/visiteur` (Bearer) rattache le visiteur au lancement : ses événements alimentent son `LogVisite`.
-- Côté JS (lib 0.5.0) : `api.visiteurs.identifier(pseudo)` (visiteur conservé sur l'appareil, clé `navinum.visiteur`,
+- Côté JS (lib 0.6.0) : **module `api.auth`** — `api.auth.connecter({ pseudo })` (mode invité ; `compte`, `oauth`,
+  `rfid` à venir derrière la même API) rattache aussi la partie lancée. En dessous : `api.visiteurs.identifier(pseudo)` (visiteur conservé sur l'appareil, clé `navinum.visiteur`,
   ou nouvel invité), `courant()`, `oublier()`, puis `ctx.identify(token)`. Le quiz ne touche jamais au stockage lui-même.
 - Le futur **module d'authentification JS** (compte en ligne, **badge RFID** en réseau local) délivrera le même jeton :
   les interactifs n'auront rien à changer. Profil public uniquement (`id`, `pseudo`, `anonyme`), jamais d'email.
