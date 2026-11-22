@@ -539,21 +539,26 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
   rafraîchissement). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
 - Prototype actuel : visiteur invité par pseudo (`POST /api/visiteur/invite`), conservé dans `localStorage`.
 
-### Gamification (XP, médailles)
+### Gamification (XP, médailles) — implémentée (#7)
 
-- **Règles en JSON dans l'entité Interactif**, éditées dans l'admin avec le formulaire générique (schéma fourni par
-  Navinum). Pas de moteur LUA comme en V1 (trop complexe). Exemple :
+- **Règles en JSON dans `Interactif.gamification`**, éditées dans l'admin (Interactifs › 🏆, formulaire généré depuis
+  `App\Gamification\RulesSchema`, validation serveur de la structure et de la syntaxe des expressions) :
   ```json
-  { "xp": [{ "evenement": "quiz.completed", "typologie": "joueur", "points": "score * 10" }],
+  { "xp": [{ "evenement": "quiz.completed", "points": "score * 10", "typologie": "Joueur", "si": "victoire" }],
     "medailles": [{ "medaille": "Sans faute", "evenement": "quiz.completed", "si": "score == total" }] }
   ```
-- Navinum évalue les règles à chaque événement reçu (`/api/launch/{jeton}/events`) et crée `Xp` / `VisiteurMedaille`.
-  Conditions dans un petit langage borné (comparaisons, `et`/`ou`), **jamais d'exécution de code**.
-- Le cœur de la gamification reste dans Navinum pour fonctionner **même sans n8n ni Internet** (réseau local du musée).
-- Comme en V1, un interactif pourra **demander une médaille** par l'API (`POST`), limité aux médailles que ses règles
-  déclarent attribuables par l'interactif (anti-triche).
-- **Typologies** : on garde le couplage XP ↔ typologie de la V1, mais facultatif : une règle sans typologie compte dans
-  « Général ». Le visiteur voit un total d'XP ; la répartition par typologie sert de profil (« plutôt joueur »…).
+- `evenement` exact ou préfixe (`quiz.*`) ; `points` et `si` sont des expressions sur les données de l'événement,
+  évaluées par `SafeExpressionLanguage` (ExpressionLanguage **sans** `constant()`/`enum()`, seules `min`, `max`,
+  `round`, `abs` ; variables scalaires uniquement : **aucune exécution de code**). Points arrondis, bornés à 0..100 000.
+- `GamificationEngine` (logique pure, testée) décide ; `GamificationService` enregistre une ligne `Xp` par gain et les
+  `VisiteurMedaille` (médaille `isUnique` : une seule fois par visiteur). Appelé à chaque `POST /api/launch/{jeton}/events`,
+  résultat renvoyé dans `gamification` (`{ xp, medailles, totalXp }`, `null` sans visiteur identifié).
+- Fonctionne **sans n8n ni Internet**. Une règle qui ne s'applique pas (variable absente, expression en erreur, médaille
+  inconnue) est ignorée et journalisée, jamais bloquante.
+- **Typologies** : facultatives, « Général » par défaut (créée automatiquement). Admin › Gamification : Médailles, Typologies.
+- **Manifeste** : section `gamification` `{ regles, medailles }` ; à l'import, les règles par défaut ne sont posées que si
+  l'interactif n'en a pas (jamais d'écrasement des réglages de l'admin), les médailles absentes sont créées.
+- À venir : affichage XP/médailles dans le quiz (#9), médaille demandée par l'interactif (#8), webhooks n8n (#10).
 
 ### n8n (automatisation, communication, IA)
 

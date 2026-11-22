@@ -40,7 +40,9 @@ plus tard par le module d'authentification en ligne / RFID). Rattache le visiteu
 déjà commencé. 401 jeton visiteur invalide, 409 lancement déjà rattaché à un autre visiteur.
 
 ### `POST /api/launch/{jeton}/events` → 202
-Corps : `{ "type": "quiz.completed", "payload": { "score": 8 } }` → `{ "accepted": true, "logVisite": "uuid" }`
+Corps : `{ "type": "quiz.completed", "payload": { "score": 8 } }` →
+`{ "accepted": true, "logVisite": "uuid", "gamification": { "xp": [{ "typologie": "Joueur", "points": 80 }], "medailles": [{ "libelle": "Sans faute", "description": "…", "image": null }], "totalXp": 230 } }`
+(`gamification` vaut `null` si le visiteur n'est pas identifié ou si l'interactif n'a pas de règles)
 - `payload.score` (entier) met à jour le score du `LogVisite` ;
 - un type finissant par `.completed` ou `.ended` clôt la session ;
 - 400 si `type` absent/invalide, `payload` non objet ou > 64 Ko.
