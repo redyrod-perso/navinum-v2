@@ -1,5 +1,8 @@
 import { BaseResource } from './BaseResource.js';
-import { ValidationError } from '../core/Errors.js';
+import { ValidationError, UnauthorizedError } from '../core/Errors.js';
+
+/** Clé de stockage du visiteur identifié sur l'appareil. */
+export const VISITEUR_STORAGE_KEY = 'navinum.visiteur';
 
 /**
  * Profil public d'un visiteur (jamais d'email ni d'information personnelle).
@@ -66,6 +69,85 @@ export class VisiteurAPI extends BaseResource {
             throw new ValidationError('Jeton visiteur manquant', { token: 'requis' });
         }
         return this.client.get('/api/visiteur/moi', { headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    /**
+     * Identifie le joueur : réutilise le visiteur conservé sur cet appareil s'il porte le même pseudo
+     * et que son jeton est toujours valide, sinon crée un visiteur invité et le conserve.
+     *
+     * C'est le point d'entrée des interactifs pour l'identification ; le futur module
+     * d'authentification (compte en ligne, OAuth, badge RFID) s'y branchera sans changement
+     * pour les interactifs. Le stockage se règle avec l'option `storage` de NavinumAPI
+     * (`localStorage` par défaut, `null` pour ne rien conserver).
+     *
+     * @param {string} pseudo - Pseudo saisi par le joueur (2 à 40 caractères)
+     * @returns {Promise<VisiteurProfil & {token: string}>} Le visiteur et son jeton (`nvv1.…`)
+     * @throws {ValidationError} Si le pseudo est invalide
+     * @throws {NetworkError} Si l'API est injoignable et qu'aucun visiteur n'est conservé pour ce pseudo
+     *
+     * @example
+     * const joueur = await api.visiteurs.identifier('Alice');
+     * const ctx = await api.launch();
+     * if (ctx) await ctx.identify(joueur.token);
+     */
+    async identifier(pseudo) {
+        const value = typeof pseudo === 'string' ? pseudo.trim() : '';
+        const saved = this.courant();
+
+        if (saved && saved.token && saved.pseudo === value) {
+            try {
+                await this.moi(saved.token);
+                return saved;
+            } catch (error) {
+                if (!(error instanceof UnauthorizedError)) {
+                    return saved; // API injoignable : on garde le visiteur connu
+                }
+            }
+        }
+
+        const { visiteur, token } = await this.inviter(value);
+        const joueur = { ...visiteur, token };
+        this.store(joueur);
+        return joueur;
+    }
+
+    /**
+     * Visiteur conservé sur cet appareil, sans appel réseau.
+     *
+     * @returns {(VisiteurProfil & {token: string})|null} Le visiteur, ou null (aucun, ou stockage indisponible)
+     *
+     * @example
+     * const pseudo = api.visiteurs.courant()?.pseudo ?? '';
+     */
+    courant() {
+        const storage = this.client.config.storage;
+        if (!storage) {
+            return null;
+        }
+        try {
+            return JSON.parse(storage.getItem(VISITEUR_STORAGE_KEY) || 'null');
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * Oublie le visiteur conservé sur cet appareil (« ce n'est pas moi », déconnexion).
+     */
+    oublier() {
+        try {
+            this.client.config.storage?.removeItem(VISITEUR_STORAGE_KEY);
+        } catch (error) { /* stockage indisponible */ }
+    }
+
+    /**
+     * @param {Object} joueur
+     * @private
+     */
+    store(joueur) {
+        try {
+            this.client.config.storage?.setItem(VISITEUR_STORAGE_KEY, JSON.stringify(joueur));
+        } catch (error) { /* stockage indisponible ou plein : le visiteur ne sera pas retrouvé */ }
     }
 
     /**

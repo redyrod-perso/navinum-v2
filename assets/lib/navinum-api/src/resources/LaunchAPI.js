@@ -1,4 +1,5 @@
 import { ValidationError } from '../core/Errors.js';
+import { subscribe } from '../core/Realtime.js';
 
 /**
  * Nom du paramètre d'URL portant le jeton de lancement.
@@ -119,41 +120,15 @@ export class LaunchAPI {
      */
     static subscribeConfig(mercure, callback, options = {}) {
         const noop = () => {};
-        const log = options.log || noop;
         const topic = mercure && mercure.topics && mercure.topics.config;
-
         if (!mercure || !mercure.hub || !topic || typeof callback !== 'function') {
             return noop;
         }
-        if (typeof EventSource === 'undefined') {
-            log('EventSource indisponible : pas de mise à jour de configuration en direct');
-            return noop;
-        }
-
-        const separator = mercure.hub.includes('?') ? '&' : '?';
-        const url = `${mercure.hub}${separator}topic=${encodeURIComponent(topic)}`;
-        log('Abonnement Mercure config', url);
-
-        let source = new EventSource(url);
-        source.onmessage = (event) => {
-            let data;
-            try {
-                data = JSON.parse(event.data);
-            } catch (error) {
-                log('Message Mercure illisible, ignoré', event.data);
-                return;
-            }
+        return subscribe(mercure.hub, topic, (data) => {
             if (data && data.config && typeof data.config === 'object') {
                 callback(data.config);
             }
-        };
-
-        return () => {
-            if (source) {
-                source.close();
-                source = null;
-            }
-        };
+        }, { log: options.log, EventSource: options.EventSource });
     }
 
     /**

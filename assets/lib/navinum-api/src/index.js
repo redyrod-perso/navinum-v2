@@ -16,6 +16,7 @@ import { ParcoursAPI } from './resources/ParcoursAPI.js';
 import { InteractifAPI } from './resources/InteractifAPI.js';
 import { VisiteurAPI } from './resources/VisiteurAPI.js';
 import { RfidAPI } from './resources/RfidAPI.js';
+import { RfidGroupeAPI } from './resources/RfidGroupeAPI.js';
 import { LogVisiteAPI } from './resources/LogVisiteAPI.js';
 import { LaunchAPI, LAUNCH_TOKEN_PARAM } from './resources/LaunchAPI.js';
 
@@ -44,6 +45,8 @@ export class NavinumAPI {
      * @param {boolean} options.debug - Mode debug (défaut: false)
      * @param {number} options.retryAttempts - Nombre de tentatives (défaut: 2)
      * @param {number} options.retryDelay - Délai entre tentatives en ms (défaut: 1000)
+     * @param {string} options.mercureHub - Hub Mercure, relatif à baseURL ou absolu (défaut: /.well-known/mercure)
+     * @param {Storage|null} options.storage - Stockage du visiteur identifié (défaut: localStorage ; null : rien conserver)
      */
     constructor(options = {}) {
         this.config = new Config(options);
@@ -56,6 +59,7 @@ export class NavinumAPI {
         this.interactifs = new InteractifAPI(this.client);
         this.visiteurs = new VisiteurAPI(this.client);
         this.rfid = new RfidAPI(this.client);
+        this.rfidGroupes = new RfidGroupeAPI(this.client);
         this.logVisites = new LogVisiteAPI(this.client);
         this.launches = new LaunchAPI(this.client);
     }
@@ -156,7 +160,8 @@ export {
     NotFoundError,
     GoneError,
     ServerError,
-    LaunchAPI
+    LaunchAPI,
+    RfidGroupeAPI
 };
 
 // Export par défaut
