@@ -224,3 +224,26 @@ test('interactifs.chargerManifeste : valeurs par défaut du configSchema', async
     assert.equal(manifest.libelle, 'Quiz');
     assert.deepEqual(defaults, { duree: 20, options: { son: true } });
 });
+
+// --- Messages d'erreur ---------------------------------------------------------------------------
+
+test('le message d’erreur du serveur est transmis (et non remplacé par « Données invalides »)', async () => {
+    const api = makeApi({
+        'POST /api/session/G/join': { status: 409, body: { error: 'Une partie est en cours dans ce groupe : attendez la fin ou choisissez un autre groupe.' } },
+        'POST /api/session/H/join': { status: 400, body: { error: 'Nom du joueur manquant' } },
+        'POST /api/rfid_groupes': { status: 422, contentType: 'application/problem+json', body: { detail: 'nom: Un groupe avec ce nom existe déjà.' } },
+    });
+
+    const conflit = await api.sessions.join('G', { playerName: 'Ana' }).catch((e) => e);
+    assert.ok(conflit instanceof NavinumAPI.NavinumAPIError);
+    assert.equal(conflit.status, 409);
+    assert.match(conflit.message, /partie est en cours/);
+
+    const invalide = await api.sessions.join('H', {}).catch((e) => e);
+    assert.ok(invalide instanceof NavinumAPI.ValidationError);
+    assert.equal(invalide.message, 'Nom du joueur manquant');
+
+    const doublon = await api.rfidGroupes.create('Classe').catch((e) => e);
+    assert.ok(doublon instanceof NavinumAPI.ValidationError);
+    assert.match(doublon.message, /existe déjà/);
+});

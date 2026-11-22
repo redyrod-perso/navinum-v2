@@ -71,31 +71,44 @@ export class ApiClient {
     }
 
     /**
-     * Gère les erreurs HTTP
+     * Message d'erreur renvoyé par le serveur, quel que soit son format :
+     * `{ error }` (contrôleurs Navinum), `{ detail }` / `{ description }` (API Platform),
+     * `{ message }`, ou texte brut.
+     * @private
+     */
+    static serverMessage(response) {
+        if (typeof response === 'string') {
+            return response.trim() && response.length <= 300 ? response.trim() : null;
+        }
+        if (!response || typeof response !== 'object') {
+            return null;
+        }
+        const message = response.error || response.message || response.detail || response.description || response['hydra:description'];
+        return typeof message === 'string' && message.trim() ? message.trim() : null;
+    }
+
+    /**
+     * Gère les erreurs HTTP : lève l'erreur typée correspondante, avec le message du serveur.
      */
     handleError(status, response) {
+        const message = ApiClient.serverMessage(response);
         switch (status) {
             case 400:
-                throw new ValidationError(
-                    response?.message || 'Données invalides',
-                    response?.errors || {}
-                );
+            case 422:
+                throw new ValidationError(message || 'Données invalides', response?.errors || response?.violations || {});
             case 401:
-                throw new UnauthorizedError(response?.message);
+                throw new UnauthorizedError(message || undefined);
             case 404:
-                throw new NotFoundError(response?.message);
+                throw new NotFoundError(message || undefined);
             case 410:
-                throw new GoneError(response?.message);
+                throw new GoneError(message || undefined);
             case 500:
             case 502:
             case 503:
-                throw new ServerError(response?.message || 'Erreur serveur', status);
+                throw new ServerError(message || 'Erreur serveur', status);
             default:
-                throw new NavinumAPIError(
-                    response?.message || `Erreur HTTP ${status}`,
-                    status,
-                    response
-                );
+                // ex. 409 (conflit : partie déjà en cours…), 403 : message du serveur et code HTTP dans error.status
+                throw new NavinumAPIError(message || `Erreur HTTP ${status}`, status, response);
         }
     }
 
