@@ -1,0 +1,27 @@
+name: Fonctionnalité
+description: Proposer une nouvelle fonctionnalité ou une évolution
+labels: [enhancement]
+body:
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Besoin
+      description: Pour qui, pour quoi faire ? (visiteur, organisateur, développeur d'interactif…)
+    validations: { required: true }
+  - type: textarea
+    id: attendu
+    attributes:
+      label: Comportement attendu et critères d'achèvement
+      placeholder: "- …\n- Tests : …"
+    validations: { required: true }
+  - type: dropdown
+    id: zone
+    attributes:
+      label: Zone
+      multiple: true
+      options: [Admin, API, Interactifs, Librairie @navinum/api, Authentification, Gamification, n8n, IA, Infrastructure]
+  - type: textarea
+    id: contexte
+    attributes:
+      label: Contexte, idées, liens
+      description: Décisions de conception concernées (voir CLAUDE.md › Feuille de route).
