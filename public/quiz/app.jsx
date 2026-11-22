@@ -6,7 +6,56 @@ const api = new NavinumAPI({
 });
 
 // Référence aux classes d'erreur
-const { NotFoundError, GoneError } = NavinumAPI;
+const { NotFoundError, GoneError, UnauthorizedError } = NavinumAPI;
+
+// --- Identification du joueur (prototype : visiteur invité) -------------------------------
+// Le joueur est un Visiteur Navinum, conservé dans le navigateur pour cumuler ses parties.
+// Le futur module d'authentification (compte en ligne, badge RFID) fournira le même jeton visiteur.
+const VISITEUR_KEY = 'navinum.visiteur';
+
+function savedVisiteur() {
+    try {
+        return JSON.parse(localStorage.getItem(VISITEUR_KEY) || 'null');
+    } catch (err) {
+        return null; // localStorage indisponible (navigation privée stricte…)
+    }
+}
+
+/** Visiteur pour ce pseudo : celui du navigateur s'il correspond et que son jeton est valide, sinon un nouvel invité. */
+async function ensureVisiteur(pseudo) {
+    let saved = savedVisiteur();
+    if (saved && saved.token && saved.pseudo === pseudo) {
+        try {
+            await api.visiteurs.moi(saved.token);
+            return saved;
+        } catch (err) {
+            if (!(err instanceof UnauthorizedError)) {
+                return saved; // problème réseau : on garde le visiteur connu
+            }
+        }
+    }
+    const { visiteur, token } = await api.visiteurs.inviter(pseudo);
+    saved = { ...visiteur, token };
+    try {
+        localStorage.setItem(VISITEUR_KEY, JSON.stringify(saved));
+    } catch (err) { /* pas de stockage : le visiteur ne sera pas retrouvé à la prochaine visite */ }
+    return saved;
+}
+
+/** Identifie le joueur et rattache la partie lancée par Navinum à son visiteur (jamais bloquant). */
+async function identifyPlayer(pseudo) {
+    try {
+        const visiteur = await ensureVisiteur(pseudo);
+        if (launchContext) {
+            await launchContext.identify(visiteur.token);
+        }
+        console.log('[Quiz] Joueur identifié :', visiteur.pseudo, visiteur.id);
+        return visiteur;
+    } catch (err) {
+        console.warn('[Quiz] Identification impossible, la partie continue sans :', err);
+        return null;
+    }
+}
 
 // Manifeste de l'interactif : son configSchema porte les valeurs par défaut
 const MANIFEST_URL = '/quiz/navinum.json';
@@ -155,6 +204,8 @@ function QuizApp() {
                     console.log('[Quiz] Lancé par Navinum:', ctx.interactif, ctx.parcours);
                     if (ctx.visiteur && !ctx.visiteur.anonyme && ctx.visiteur.pseudo) {
                         setPlayerName(ctx.visiteur.pseudo);
+                    } else if (savedVisiteur()?.pseudo) {
+                        setPlayerName(savedVisiteur().pseudo); // joueur déjà venu sur ce navigateur
                     }
                 } else {
                     console.log('[Quiz] Mode autonome : configuration par défaut de navinum.json');
@@ -505,6 +556,9 @@ function QuizApp() {
             // Normaliser le nom du groupe pour l'utiliser comme sessionId
             const normalizedGroupName = groupName.trim();
 
+            // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
+            await identifyPlayer(playerName.trim());
+
             // 0. Vérifier que le groupe n'est pas complet (joueursMax)
             try {
                 const existing = await api.sessions.get(normalizedGroupName);
@@ -698,8 +752,8 @@ function QuizApp() {
         setStage('home');
         setSelectedTheme(null);
         // Conserver le pseudo du visiteur Navinum s'il est connu
-        const visiteur = launchContext && launchContext.visiteur;
-        setPlayerName(visiteur && !visiteur.anonyme && visiteur.pseudo ? visiteur.pseudo : '');
+        const visiteur = (launchContext && launchContext.visiteur) || savedVisiteur();
+        setPlayerName(visiteur && visiteur.pseudo ? visiteur.pseudo : '');
         setGroupName('');
         setSessionId('');
         setPlayers([]);

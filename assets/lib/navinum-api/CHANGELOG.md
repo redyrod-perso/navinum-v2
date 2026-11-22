@@ -7,6 +7,24 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.4.0] - 2026-11-22
+
+### Added
+- `api.visiteurs.inviter(pseudo)` : crée un visiteur invité (`POST /api/visiteur/invite`) et renvoie
+  `{ visiteur: { id, pseudo, anonyme }, token }` (jeton visiteur `nvv1.…`).
+- `api.visiteurs.moi(token)` : profil du visiteur pour un jeton (`GET /api/visiteur/moi`), 401 si invalide.
+- `api.launches.identify(token, visiteurToken)` et `ctx.identify(visiteurToken)` : rattache le visiteur au
+  lancement (`POST /api/launch/{token}/visiteur`) ; ses événements sont ensuite enregistrés à son nom.
+
+### Changed
+- Les opérations CRUD `api.visiteurs` (`/api/visiteurs`) sont réservées à l'admin côté serveur (401 sinon).
+
+### Deprecated
+- `api.visiteurs.register()` et `api.visiteurs.getByRfid()` : endpoints inexistants, remplacés à terme par le
+  module d'authentification (en ligne / RFID).
+
+---
+
 ## [0.3.0] - 2026-11-21
 
 ### Added

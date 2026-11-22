@@ -389,45 +389,47 @@ await api.interactifs.logInteraction(5, {
 
 ### Visiteurs
 
-#### Enregistrer un nouveau visiteur
+Un interactif identifie son joueur par un **jeton visiteur** (`nvv1.…`). Pour le prototype, il s'obtient en créant
+un **visiteur invité** à partir d'un pseudo ; le futur module d'authentification (compte en ligne, badge RFID) délivrera
+le même jeton, sans changement pour les interactifs.
+
+#### Créer un visiteur invité et le garder dans le navigateur
 
 ```javascript
-const visiteur = await api.visiteurs.register({
-    nom: 'Dupont',
-    prenom: 'Jean',
-    email: 'jean.dupont@example.com',
-    telephone: '0612345678',
-    csp: 'etudiant',
-    age: 25
-});
+const CLE = 'navinum.visiteur';
+let joueur = JSON.parse(localStorage.getItem(CLE) || 'null');
 
-console.log('Visiteur créé, ID:', visiteur.id);
-```
-
-#### Rechercher un visiteur par RFID
-
-```javascript
-const visiteur = await api.visiteurs.getByRfid('TAG123456');
-
-if (visiteur) {
-    console.log('Bonjour', visiteur.prenom, visiteur.nom);
+if (!joueur || joueur.pseudo !== pseudoSaisi) {
+    const { visiteur, token } = await api.visiteurs.inviter(pseudoSaisi); // POST /api/visiteur/invite
+    joueur = { ...visiteur, token };
+    localStorage.setItem(CLE, JSON.stringify(joueur));
 }
 ```
 
-#### CRUD standard
+#### Vérifier un jeton conservé
 
 ```javascript
-// Liste
-const visiteurs = await api.visiteurs.getAll();
-
-// Par ID
-const v = await api.visiteurs.getById(123);
-
-// Update
-await api.visiteurs.update(123, {
-    email: 'nouveau@email.com'
-});
+try {
+    const { visiteur } = await api.visiteurs.moi(joueur.token); // GET /api/visiteur/moi
+} catch (error) {
+    if (error instanceof NavinumAPI.UnauthorizedError) {
+        localStorage.removeItem('navinum.visiteur'); // jeton invalide : redemander un pseudo
+    }
+}
 ```
+
+#### Rattacher la partie au visiteur
+
+```javascript
+const ctx = await api.launch();          // interactif lancé par Navinum (?nv=)
+if (ctx) await ctx.identify(joueur.token); // POST /api/launch/{token}/visiteur
+// les événements ctx.track(...) sont désormais enregistrés au nom du visiteur (LogVisite)
+```
+
+> Le profil renvoyé (`{ id, pseudo, anonyme }`) ne contient jamais d'email ni de donnée personnelle.
+> Les opérations CRUD `api.visiteurs.getAll()`, `getById()`, `update()`… (`/api/visiteurs`) sont réservées à
+> l'admin : elles renvoient 401 depuis un interactif. `register()` et `getByRfid()` sont dépréciées (endpoints
+> inexistants) en attendant le module d'authentification.
 
 ---
 
