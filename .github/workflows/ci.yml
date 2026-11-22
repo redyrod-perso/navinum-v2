@@ -25,9 +25,10 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
+          # Base jetable, sans mot de passe (accessible uniquement depuis le job)
           POSTGRES_USER: navinum
-          POSTGRES_PASSWORD: navinumV2
           POSTGRES_DB: navinum_test
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -37,8 +38,8 @@ jobs:
           --health-retries 10
 
     env:
-      # .env.test pointe déjà sur 127.0.0.1:5432/navinum_test (le service ci-dessus)
       APP_ENV: test
+      DATABASE_URL: postgresql://navinum@127.0.0.1:5432/navinum_test?serverVersion=16&charset=utf8
 
     steps:
       - uses: actions/checkout@v4
