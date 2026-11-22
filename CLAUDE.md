@@ -129,6 +129,15 @@ make sessions-reset-api  # Réinitialiser via API
 
 ## Code Style
 
+### Règles de qualité (non négociables)
+
+- **Un bug = un nouveau test** : tout bug corrigé s'accompagne d'un test qui échoue sans le correctif.
+- Toute nouvelle API ou règle métier arrive avec ses tests (unitaires et/ou fonctionnels).
+- Lancer les tests sur la base **dédiée** `navinum_test` : dans le conteneur, `DATABASE_URL` l'emporte sur `.env.test`
+  (`docker exec -e APP_ENV=test -e DATABASE_URL=…/navinum_test navinum_app php bin/phpunit`).
+- Sécurité par défaut : une ressource API est fermée (`ROLE_ADMIN`) tant qu'on n'a pas décidé de l'ouvrir.
+
+
 ### Backend PHP/Symfony
 
 - Entités avec EntityTrait pour UUID et timestamps
@@ -393,6 +402,25 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
 - Nouvel interactif = un manifeste `navinum.json` importé (admin → Interactifs → Importer, ou `app:interactif:import`).
 - Contrat complet : `specs/005-interactifs-config/contracts/launch-api.md`.
 
+### Visiteurs et identification (prototype)
+
+- `POST /api/visiteur/invite` `{pseudo}` → visiteur invité + **jeton visiteur** `nvv1.<uuid>.<signature>` (HMAC avec
+  `APP_SECRET`, sans stockage, sans expiration pour l'instant). `GET /api/visiteur/moi` (Bearer) → profil.
+- `POST /api/launch/{jeton}/visiteur` (Bearer) rattache le visiteur au lancement : ses événements alimentent son `LogVisite`.
+- Côté JS (lib 0.4.0) : `api.visiteurs.inviter(pseudo)`, `api.visiteurs.moi(token)`, `ctx.identify(token)`.
+  Le quiz garde le visiteur dans `localStorage` (`navinum.visiteur`) pour cumuler ses parties.
+- Le futur **module d'authentification JS** (compte en ligne, **badge RFID** en réseau local) délivrera le même jeton :
+  les interactifs n'auront rien à changer. Profil public uniquement (`id`, `pseudo`, `anonyme`), jamais d'email.
+
+### Sécurité de l'API
+
+- Pare-feu `api` (`^/api`) **sans session** ; les futurs modes d'authentification (clé d'intégration n8n, jeton visiteur,
+  RFID) s'y brancheront.
+- API Platform : catalogue en lecture publique (expositions, interactifs, organisateurs) ; visiteurs, badges RFID,
+  flottes, périphériques réservés à `ROLE_ADMIN` ; toute écriture réservée à `ROLE_ADMIN`. Groupes RFID : lecture et
+  création publiques (quiz), modification/suppression admin.
+- Ne jamais exposer une relation qui boucle (ex. `Exposition.parcours` est `#[Ignore]`).
+
 ### Rôles de l'admin
 
 - `ROLE_ADMIN` : tout. `ROLE_ORGANISATEUR` : expositions de son organisateur (éditeur ou diffuseur) et leurs parcours.
@@ -462,6 +490,62 @@ Le hook vérifie automatiquement si la documentation a été mise à jour quand 
   secret dans le `.env` du VPS, jamais dans le dépôt.
 - Worker FrankenPHP : l'application reste en mémoire entre les requêtes → services sans état, pas de données
   propres à une requête dans des propriétés de service.
+
+## Feuille de route et décisions de conception
+
+Idées et décisions validées avec le porteur du projet (à transformer en tickets GitHub).
+
+### Authentification (visiteurs et interactifs)
+
+- **Module JS d'authentification partagé**, intégrable par n'importe quel interactif et distribué aux développeurs tiers.
+- Modes : compte en ligne (email + mot de passe), **OAuth** (Google et autres fournisseurs), **badge RFID** en réseau
+  local et sur le matériel équipé.
+- Tous délivrent le même **jeton Bearer** visiteur (format actuel `nvv1.…`, à faire évoluer : expiration, révocation,
+  rafraîchissement). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
+- Prototype actuel : visiteur invité par pseudo (`POST /api/visiteur/invite`), conservé dans `localStorage`.
+
+### Gamification (XP, médailles)
+
+- **Règles en JSON dans l'entité Interactif**, éditées dans l'admin avec le formulaire générique (schéma fourni par
+  Navinum). Pas de moteur LUA comme en V1 (trop complexe). Exemple :
+  ```json
+  { "xp": [{ "evenement": "quiz.completed", "typologie": "joueur", "points": "score * 10" }],
+    "medailles": [{ "medaille": "Sans faute", "evenement": "quiz.completed", "si": "score == total" }] }
+  ```
+- Navinum évalue les règles à chaque événement reçu (`/api/launch/{jeton}/events`) et crée `Xp` / `VisiteurMedaille`.
+  Conditions dans un petit langage borné (comparaisons, `et`/`ou`), **jamais d'exécution de code**.
+- Le cœur de la gamification reste dans Navinum pour fonctionner **même sans n8n ni Internet** (réseau local du musée).
+- Comme en V1, un interactif pourra **demander une médaille** par l'API (`POST`), limité aux médailles que ses règles
+  déclarent attribuables par l'interactif (anti-triche).
+- **Typologies** : on garde le couplage XP ↔ typologie de la V1, mais facultatif : une règle sans typologie compte dans
+  « Général ». Le visiteur voit un total d'XP ; la répartition par typologie sert de profil (« plutôt joueur »…).
+
+### n8n (automatisation, communication, IA)
+
+n8n tourne sur le VPS (`https://n8n.srv802003.hstgr.cloud`, même réseau Docker que Navinum : appels internes).
+
+- **Navinum → n8n** : webhooks sortants signés (HMAC), envoyés en asynchrone (Symfony Messenger + worker), déclarés dans
+  une section « Intégrations » de l'admin. Événements : `medaille.obtenue`, `partie.terminee`, `visite.terminee`,
+  `visiteur.inscrit`, `xp.palier`…
+- **n8n → Navinum** : API protégée par clé d'intégration (Bearer) pour agir (attribuer une médaille, remplir une config,
+  lire des statistiques). n8n peut ainsi porter des règles de gamification « intelligentes » en complément des règles JSON.
+- Idées : mail de médaille ; **souvenir de visite** (récapitulatif, via `TemplateMail` / `SentMessage`, consentement
+  `has_newsletter`) ; récapitulatif de groupe pour l'enseignant ; rapport hebdomadaire aux organisateurs ;
+  **questions de quiz générées par IA** (validées par le JSON Schema, déposées en brouillon) ; traduction ; surveillance
+  et alertes.
+- Dev : prévoir un n8n local optionnel dans `docker-compose.dev.yaml` (règle « même stack partout »).
+
+### Interactifs intelligents (IA)
+
+- Interactifs dialoguant avec une IA : **jeux de rôle, jeux éducatifs**, personnages de musée, tuteur…
+- Deux voies possibles : workflows **n8n** exposés en API (prototypage rapide, sans code) ou **Symfony AI**
+  (`symfony/ai`) dans Navinum (contrôle fin, quotas, journalisation). Dans les deux cas, l'interactif passe par l'API
+  Navinum (jamais de clé d'IA côté navigateur) et reçoit sa personnalité/ses consignes via sa config JSON Schema.
+
+### Points d'infrastructure à traiter
+
+- 8 paquets retenus sur le VPS (noyau 6.8.0-151…) : à installer lors d'une maintenance (redémarrage).
+- Projet datatourism (nginx/php) : déclare encore une route Traefik sur `activites-touristiques.online` (masquée).
 
 ## Troubleshooting
 
