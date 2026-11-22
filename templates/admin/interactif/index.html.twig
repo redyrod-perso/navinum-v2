@@ -3,6 +3,7 @@
     <a class="btn btn-outline-primary" href="{{ path('admin_interactif_import') }}"><i class="bi bi-filetype-json"></i> Importer un manifeste</a>
 {% endblock %}
 {% block row_actions %}
+    <a class="btn btn-sm btn-outline-warning" href="{{ path('admin_interactif_gamification', {id: item.id}) }}" title="Règles de gamification (XP, médailles)"><i class="bi bi-trophy"></i></a>
     {% if item.urlFichierInteractif %}
     <form class="d-inline" method="post" action="{{ path('admin_interactif_preview', {id: item.id}) }}" target="_blank">
         <input type="hidden" name="_token" value="{{ csrf_token('preview' ~ item.id) }}">

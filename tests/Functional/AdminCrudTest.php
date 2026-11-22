@@ -30,6 +30,8 @@ class AdminCrudTest extends WebTestCase
             'peripherique[adresse_mac]' => $v,
             'peripherique[interactif]' => (string) self::anyInteractif($c)->getId(),
         ]];
+        yield 'médailles' => ['/admin/medailles', 'medaille', 'libelle', fn (string $v) => ['medaille[libelle]' => $v]];
+        yield 'typologies' => ['/admin/typologies', 'typologie', 'libelle', fn (string $v) => ['typologie[libelle]' => $v]];
         yield 'comptes' => ['/admin/comptes', 'user', 'nom', fn (string $v) => [
             'user[email]' => strtolower($v).'@test.local',
             'user[nom]' => $v,
