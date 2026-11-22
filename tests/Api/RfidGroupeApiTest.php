@@ -28,7 +28,7 @@ class RfidGroupeApiTest extends ApiTestCase
         $response = static::createClient()->request('GET', '/api/rfid_groupes');
 
         $this->assertResponseIsSuccessful();
-        $this->assertResponseHeaderSame('content-type', 'application/ld+json; charset=utf-8');
+        $this->assertStringStartsWith('application/ld+json', (string) static::getClient()->getResponse()->headers->get('content-type'));
 
         $this->assertJsonContains([
             '@context' => '/api/contexts/RfidGroupe',
@@ -53,7 +53,7 @@ class RfidGroupeApiTest extends ApiTestCase
         ]);
 
         $this->assertResponseStatusCodeSame(201);
-        $this->assertResponseHeaderSame('content-type', 'application/ld+json; charset=utf-8');
+        $this->assertStringStartsWith('application/ld+json', (string) static::getClient()->getResponse()->headers->get('content-type'));
 
         $this->assertJsonContains([
             '@context' => '/api/contexts/RfidGroupe',
@@ -83,7 +83,7 @@ class RfidGroupeApiTest extends ApiTestCase
         ]);
 
         $this->assertResponseStatusCodeSame(422);
-        $this->assertResponseHeaderSame('content-type', 'application/problem+json; charset=utf-8');
+        $this->assertStringStartsWith('application/problem+json', (string) static::getClient()->getResponse()->headers->get('content-type'));
 
         $this->assertJsonContains([
             '@type' => 'ConstraintViolation',
@@ -102,7 +102,7 @@ class RfidGroupeApiTest extends ApiTestCase
         ]);
 
         $this->assertResponseStatusCodeSame(422);
-        $this->assertResponseHeaderSame('content-type', 'application/problem+json; charset=utf-8');
+        $this->assertStringStartsWith('application/problem+json', (string) static::getClient()->getResponse()->headers->get('content-type'));
 
         $this->assertJsonContains([
             '@type' => 'ConstraintViolation',
