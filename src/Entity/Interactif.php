@@ -102,6 +102,14 @@ class Interactif
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $variable = null;
 
+    /**
+     * Règles de gamification (XP, médailles) évaluées à chaque événement de l'interactif.
+     * Format : voir App\Gamification\RulesSchema. Éditées dans l'admin (formulaire généré).
+     */
+    #[ORM\Column(type: 'json', nullable: true)]
+    #[Ignore]
+    private ?array $gamification = null;
+
     #[ORM\Column(length: 128, nullable: true)]
     private ?string $url_scheme = null;
 
@@ -512,6 +520,19 @@ class Interactif
     public function setVariable(?string $variable): static
     {
         $this->variable = $variable;
+
+        return $this;
+    }
+
+    #[Ignore]
+    public function getGamification(): ?array
+    {
+        return $this->gamification;
+    }
+
+    public function setGamification(?array $gamification): static
+    {
+        $this->gamification = $gamification;
 
         return $this;
     }

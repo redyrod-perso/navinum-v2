@@ -122,5 +122,12 @@ class AdminParcoursInteractifTest extends WebTestCase
         $this->assertTrue($quiz->isConfigurable());
         $this->assertSame(20, $quiz->getDefaultConfig()['tempsParQuestion']);
         $this->assertNotEmpty($quiz->getDefaultConfig()['themes']);
+
+        // Gamification déclarée dans le manifeste : règles par défaut et médailles créées
+        $this->assertSame('quiz.completed', $quiz->getGamification()['xp'][0]['evenement']);
+        $this->assertSame([], \App\Gamification\RulesSchema::validate($quiz->getGamification()));
+        foreach ($manifest['gamification']['medailles'] as $definition) {
+            $this->assertNotNull($em->getRepository(\App\Entity\Medaille::class)->findOneBy(['libelle' => $definition['libelle']]));
+        }
     }
 }

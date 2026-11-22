@@ -454,5 +454,48 @@
       "joueursMax",
       "themes"
     ]
+  },
+  "gamification": {
+    "regles": {
+      "xp": [
+        {
+          "evenement": "quiz.completed",
+          "points": "score * 10",
+          "typologie": "Joueur"
+        },
+        {
+          "evenement": "quiz.completed",
+          "points": "20",
+          "typologie": "Joueur",
+          "si": "victoire"
+        }
+      ],
+      "medailles": [
+        {
+          "medaille": "Sans faute",
+          "evenement": "quiz.completed",
+          "si": "total > 0 and score == total"
+        },
+        {
+          "medaille": "Champion du quiz",
+          "evenement": "quiz.completed",
+          "si": "victoire and joueurs > 1"
+        }
+      ]
+    },
+    "medailles": [
+      {
+        "libelle": "Sans faute",
+        "description": "Toutes les réponses justes dans une partie de quiz.",
+        "condition": "Répondre juste à toutes les questions d'une partie.",
+        "unique": true
+      },
+      {
+        "libelle": "Champion du quiz",
+        "description": "Victoire dans une partie à plusieurs joueurs.",
+        "condition": "Gagner une partie de quiz contre au moins un autre joueur.",
+        "unique": true
+      }
+    ]
   }
 }

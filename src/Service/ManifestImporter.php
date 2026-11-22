@@ -3,6 +3,8 @@
 namespace App\Service;
 
 use App\Entity\Interactif;
+use App\Entity\Medaille;
+use App\Gamification\RulesSchema;
 use App\Repository\InteractifRepository;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -14,7 +16,11 @@ use Doctrine\ORM\EntityManagerInterface;
  *   "libelle": "Quiz", "version": "1.0.0", "editeur": "…", "description": "…",
  *   "source_type": "html5", "url": "/quiz/index.html",
  *   "events": [{"type": "quiz.completed", "description": "…"}],
- *   "configSchema": { JSON Schema avec valeurs default }
+ *   "configSchema": { JSON Schema avec valeurs default },
+ *   "gamification": {
+ *     "regles": { "xp": […], "medailles": […] },            // règles par défaut (voir RulesSchema)
+ *     "medailles": [{ "libelle": "Sans faute", "description": "…", "condition": "…", "unique": true }]
+ *   }
  * }
  * L'interactif est retrouvé par son libellé (créé s'il n'existe pas).
  */
@@ -46,6 +52,17 @@ final class ManifestImporter
             throw new \InvalidArgumentException('"configSchema" doit être un JSON Schema (objet avec "type": "object").');
         }
 
+        $gamification = $manifest['gamification'] ?? null;
+        if (null !== $gamification) {
+            if (!\is_array($gamification)) {
+                throw new \InvalidArgumentException('"gamification" doit être un objet { regles, medailles }.');
+            }
+            $errors = RulesSchema::validate($gamification['regles'] ?? ['xp' => [], 'medailles' => []]);
+            if ([] !== $errors) {
+                throw new \InvalidArgumentException('Règles de gamification invalides : '.implode(' ; ', $errors));
+            }
+        }
+
         $interactif = $target ?? $this->interactifs->findOneBy(['libelle' => $libelle]);
         $created = null === $interactif;
         $interactif ??= new Interactif();
@@ -71,6 +88,27 @@ final class ManifestImporter
         }
 
         $this->em->persist($interactif);
+
+        if (null !== $gamification) {
+            // Règles par défaut : uniquement si l'admin n'en a pas encore défini (jamais d'écrasement)
+            if (null === $interactif->getGamification() && isset($gamification['regles'])) {
+                $interactif->setGamification(RulesSchema::normalize($gamification['regles']));
+            }
+            // Médailles déclarées : créées si absentes (rattachées à l'interactif)
+            foreach ($gamification['medailles'] ?? [] as $definition) {
+                $nom = \is_array($definition) ? trim((string) ($definition['libelle'] ?? '')) : '';
+                if ('' === $nom || null !== $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $nom])) {
+                    continue;
+                }
+                $this->em->persist((new Medaille())
+                    ->setLibelle($nom)
+                    ->setDescription(isset($definition['description']) ? (string) $definition['description'] : null)
+                    ->setConditionObtention(isset($definition['condition']) ? (string) $definition['condition'] : null)
+                    ->setIsUnique((bool) ($definition['unique'] ?? true))
+                    ->setInteractif($interactif));
+            }
+        }
+
         $this->em->flush();
 
         return [$interactif, $created];

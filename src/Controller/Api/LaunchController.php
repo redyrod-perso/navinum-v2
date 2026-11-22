@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\LaunchToken;
+use App\Gamification\GamificationService;
 use App\Repository\LaunchTokenRepository;
 use App\Service\LaunchService;
 use App\Service\VisiteurToken;
@@ -16,7 +17,8 @@ use Symfony\Component\Routing\Attribute\Route;
  *
  * - GET  /api/launch/{token}         contexte : interactif, parcours, exposition, config fusionnée, visiteur
  * - POST /api/launch/{token}/visiteur rattache le visiteur (Authorization: Bearer <jeton visiteur>)
- * - POST /api/launch/{token}/events  événement {type, payload} → consigné dans LogVisite
+ * - POST /api/launch/{token}/events  événement {type, payload} → consigné dans LogVisite,
+ *                                    puis gamification (XP, médailles) renvoyée dans `gamification`
  *
  * Codes : 404 jeton inconnu, 410 jeton expiré, 400 requête invalide.
  */
@@ -27,6 +29,7 @@ final class LaunchController extends AbstractController
         private readonly LaunchTokenRepository $tokens,
         private readonly LaunchService $launch,
         private readonly VisiteurToken $visiteurTokens,
+        private readonly GamificationService $gamification,
     ) {
     }
 
@@ -87,7 +90,20 @@ final class LaunchController extends AbstractController
 
         $log = $this->launch->recordEvent($launchToken, $type, $payload);
 
-        return $this->json(['accepted' => true, 'logVisite' => (string) $log->getId()], 202);
+        // Gamification : XP et médailles selon les règles de l'interactif (null sans visiteur identifié)
+        $gamification = $this->gamification->apply(
+            $launchToken->getInteractif(),
+            $launchToken->getVisiteur(),
+            $type,
+            $payload,
+            'launch:'.substr($launchToken->getToken(), 0, 16),
+        );
+
+        return $this->json([
+            'accepted' => true,
+            'logVisite' => (string) $log->getId(),
+            'gamification' => $gamification,
+        ], 202);
     }
 
     private function tokenError(?LaunchToken $token): ?JsonResponse

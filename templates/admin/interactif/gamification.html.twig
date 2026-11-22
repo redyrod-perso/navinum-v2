@@ -1,0 +1,103 @@
+{% extends 'admin/layout.html.twig' %}
+{% block title %}Gamification · {{ interactif.libelle }}{% endblock %}
+{% block body %}
+<nav aria-label="Fil d'Ariane"><ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{{ path('admin_interactif_index') }}">Interactifs</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ interactif.libelle }} · gamification</li>
+</ol></nav>
+<h1 class="h3">Règles de gamification <span class="text-secondary fs-6">{{ interactif.libelle }}</span></h1>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-8">
+        <p class="text-secondary mb-2">
+            À chaque événement envoyé par l'interactif, les règles dont l'<strong>événement</strong> correspond
+            (et dont la <strong>condition</strong> est vraie) attribuent des <strong>points d'expérience</strong> ou une
+            <strong>médaille</strong> au visiteur identifié.
+        </p>
+        <ul class="small text-secondary mb-0">
+            <li>Événement : exact (<code>quiz.completed</code>) ou préfixe (<code>quiz.*</code>).</li>
+            <li>Points et conditions : calculs sur les données de l'événement, ex. <code>score * 10</code>,
+                <code>score == total</code>, <code>victoire and duree &lt; 60</code>. Fonctions : <code>min</code>,
+                <code>max</code>, <code>round</code>, <code>abs</code>.</li>
+            <li>Typologie facultative (« Général » par défaut) ; médaille = libellé exact d'une médaille existante.</li>
+        </ul>
+    </div>
+    <div class="col-lg-4">
+        {% if interactif.explicationsResultats %}
+        <div class="card"><div class="card-body small">
+            <div class="fw-semibold mb-1">Événements émis par l'interactif</div>
+            <pre class="mb-0 small" style="white-space: pre-wrap">{{ interactif.explicationsResultats }}</pre>
+        </div></div>
+        {% endif %}
+        <div class="small mt-2">
+            Médailles disponibles :
+            {% for m in medailles %}<span class="badge text-bg-light border">{{ m }}</span> {% else %}<em>aucune</em>{% endfor %}
+            · <a href="{{ path('admin_medaille_new') }}">créer une médaille</a>
+        </div>
+    </div>
+</div>
+
+{% if errors is not empty %}
+<div class="alert alert-danger"><strong>Les règles ne sont pas valides :</strong>
+    <ul class="mb-0">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post" id="regles-form">
+    <input type="hidden" name="_token" value="{{ csrf_token('gamification' ~ interactif.id) }}">
+    <div class="card mb-3"><div class="card-body"><div id="regles-editor"></div></div></div>
+    <details class="mb-3">
+        <summary class="text-secondary small">Voir / modifier en JSON</summary>
+        <textarea class="form-control font-monospace mt-2" name="regles" id="regles-json" rows="14" spellcheck="false">{{ regles }}</textarea>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="apply-json">Appliquer le JSON au formulaire</button>
+    </details>
+    <div class="d-flex gap-2">
+        <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Enregistrer</button>
+        <a class="btn btn-outline-secondary" href="{{ path('admin_interactif_index') }}">Annuler</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block javascripts %}
+<script src="https://cdn.jsdelivr.net/npm/@json-editor/json-editor@2.15.1/dist/jsoneditor.min.js"></script>
+<script>
+(() => {
+    JSONEditor.defaults.languages.fr = {
+        error_notset: 'Ce champ est obligatoire', error_notempty: 'Valeur obligatoire', error_minLength: 'Au moins {{ '{{0}}' }} caractère(s)',
+        error_maxLength: 'Au plus {{ '{{0}}' }} caractère(s)', error_type: 'Type attendu : {{ '{{0}}' }}',
+        button_collapse: 'Replier', button_expand: 'Déplier', button_add_row_title: 'Ajouter : {{ '{{0}}' }}',
+        button_delete_row_title: 'Supprimer : {{ '{{0}}' }}', button_delete_row_title_short: 'Supprimer',
+        button_move_up_title: 'Monter', button_move_down_title: 'Descendre', button_delete_all_title: 'Tout supprimer',
+        button_delete_last_title: 'Supprimer le dernier {{ '{{0}}' }}', button_copy_row_title_short: 'Dupliquer',
+        delete_confirm: 'Supprimer cette règle ?',
+    };
+    JSONEditor.defaults.language = 'fr';
+
+    const textarea = document.getElementById('regles-json');
+    let startval;
+    try { startval = JSON.parse(textarea.value); } catch (e) { startval = undefined; }
+    const editor = new JSONEditor(document.getElementById('regles-editor'), {
+        schema: {{ schema|json_encode|raw }},
+        startval,
+        theme: 'bootstrap5',
+        disable_properties: true,
+        disable_edit_json: true,
+        prompt_before_delete: true,
+        show_errors: 'interaction',
+    });
+    const sync = () => { textarea.value = JSON.stringify(editor.getValue(), null, 2); };
+    editor.on('change', sync);
+    document.getElementById('apply-json').addEventListener('click', () => {
+        try { editor.setValue(JSON.parse(textarea.value)); } catch (e) { alert('JSON invalide : ' + e.message); }
+    });
+    document.getElementById('regles-form').addEventListener('submit', (event) => {
+        sync();
+        if (editor.validate().length) {
+            event.preventDefault();
+            editor.options.show_errors = 'always';
+            editor.onChange();
+        }
+    });
+})();
+</script>
+{% endblock %}

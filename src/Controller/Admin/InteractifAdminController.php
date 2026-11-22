@@ -3,6 +3,8 @@
 namespace App\Controller\Admin;
 
 use App\Entity\Interactif;
+use App\Entity\Medaille;
+use App\Gamification\RulesSchema;
 use App\Form\InteractifType;
 use App\Service\LaunchService;
 use App\Service\ManifestImporter;
@@ -72,6 +74,50 @@ final class InteractifAdminController extends AbstractCrudController
         }
 
         return $this->render('admin/interactif/import.html.twig', ['manifest' => $json, 'error' => $error]);
+    }
+
+    /**
+     * Règles de gamification de l'interactif (XP, médailles) : formulaire généré depuis
+     * RulesSchema, validé côté serveur (structure + syntaxe des expressions).
+     */
+    #[Route('/{id}/gamification', name: 'gamification', requirements: ['id' => '[0-9a-f-]{36}'], methods: ['GET', 'POST'])]
+    public function gamification(Request $request, string $id): Response
+    {
+        /** @var Interactif $interactif */
+        $interactif = $this->findEntity($id);
+        $errors = [];
+        $submitted = null;
+
+        if ($request->isMethod('POST')) {
+            if (!$this->isCsrfTokenValid('gamification'.$id, (string) $request->request->get('_token'))) {
+                throw $this->createAccessDeniedException();
+            }
+            $submitted = (string) $request->request->get('regles', '');
+            $regles = json_decode($submitted, true);
+            $errors = RulesSchema::validate($regles);
+            if ([] === $errors) {
+                $regles = RulesSchema::normalize($regles);
+                $vide = [] === ($regles['xp'] ?? []) && [] === ($regles['medailles'] ?? []);
+                $interactif->setGamification($vide ? null : $regles);
+                $this->em->flush();
+                $this->addFlash('success', $vide ? 'Règles de gamification supprimées.' : 'Règles de gamification enregistrées.');
+
+                return $this->redirectToRoute('admin_interactif_index');
+            }
+        }
+
+        $medailles = array_map(
+            static fn (Medaille $m) => $m->getLibelle(),
+            $this->em->getRepository(Medaille::class)->findBy([], ['libelle' => 'ASC']),
+        );
+
+        return $this->render('admin/interactif/gamification.html.twig', [
+            'interactif' => $interactif,
+            'schema' => RulesSchema::schema(),
+            'regles' => $submitted ?? json_encode($interactif->getGamification() ?? ['xp' => [], 'medailles' => []], \JSON_PRETTY_PRINT | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES),
+            'errors' => $errors,
+            'medailles' => $medailles,
+        ]);
     }
 
     /** Lance l'interactif avec sa configuration par défaut (aperçu, sans parcours ni visiteur). */
