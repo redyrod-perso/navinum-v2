@@ -3,14 +3,29 @@
 namespace App\Entity;
 
 use ApiPlatform\Metadata\ApiResource;
+use ApiPlatform\Metadata\Delete;
+use ApiPlatform\Metadata\Get;
+use ApiPlatform\Metadata\GetCollection;
+use ApiPlatform\Metadata\Patch;
+use ApiPlatform\Metadata\Post;
 use App\Repository\ExpositionRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Component\Serializer\Attribute\Ignore;
 
 #[ORM\Entity(repositoryClass: ExpositionRepository::class)]
 #[ORM\HasLifecycleCallbacks]
-#[ApiResource]
+// Lecture publique (catalogue), écriture réservée à l'admin
+#[ApiResource(
+    operations: [
+        new GetCollection(),
+        new Get(),
+        new Post(security: "is_granted('ROLE_ADMIN')"),
+        new Patch(security: "is_granted('ROLE_ADMIN')"),
+        new Delete(security: "is_granted('ROLE_ADMIN')"),
+    ],
+)]
 #[ORM\Table(name: 'exposition')]
 #[ORM\UniqueConstraint(name: 'uniq_exposition_libelle', columns: ['libelle'])]
 class Exposition
@@ -62,7 +77,9 @@ class Exposition
     #[ORM\Column(type: 'boolean', options: ['default' => 1])]
     private bool $is_tosync = true;
 
+    // Exclu de l'API : Parcours n'est pas une ressource et référence ses expositions (référence circulaire)
     #[ORM\ManyToMany(targetEntity: Parcours::class, mappedBy: 'expositions')]
+    #[Ignore]
     private Collection $parcours;
 
     public function __construct()
@@ -228,6 +245,7 @@ class Exposition
     /**
      * @return Collection<int, Parcours>
      */
+    #[Ignore]
     public function getParcours(): Collection
     {
         return $this->parcours;

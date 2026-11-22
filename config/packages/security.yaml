@@ -18,6 +18,12 @@ security:
         dev:
             pattern: ^/(_(profiler|wdt)|css|images|js)/
             security: false
+        # API : sans session (stateless). Les opérations d'écriture sont réservées à ROLE_ADMIN ;
+        # les futurs modes d'authentification (clé d'intégration n8n, jeton visiteur, RFID) se brancheront ici.
+        api:
+            pattern: ^/api(/|$)
+            stateless: true
+            provider: admin_users
         main:
             lazy: true
             provider: admin_users
