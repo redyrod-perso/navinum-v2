@@ -71,6 +71,7 @@ class SessionLifecycleTest extends WebTestCase
         $res = $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'Chloé']);
         $this->assertSame(409, $res['status']);
         $this->assertStringContainsString('partie est en cours', $res['body']['error']);
+        $this->assertSame('PARTIE_EN_COURS', $res['body']['code']);
 
         // La création ne doit pas écraser une partie en cours
         $this->assertSame(409, $this->post('/api/session/create', ['playerName' => 'Chloé', 'sessionId' => $this->groupe])['status']);
@@ -85,9 +86,52 @@ class SessionLifecycleTest extends WebTestCase
         $this->assertTrue($res['body']['session']['players'][0]['isLeader']);
     }
 
+    /** Codes métier stables dans les réponses d'erreur (lus par NavinumAPI.erreurs). */
+    public function testCodesDErreur(): void
+    {
+        $this->assertSame('VALIDATION', $this->post('/api/session/create', [])['body']['code']);
+        $this->assertSame('SESSION_INTROUVABLE', $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'Ana'])['body']['code']);
+
+        $this->post('/api/session/create', ['playerName' => 'Alice', 'sessionId' => $this->groupe]);
+        $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'Bob']);
+        $refus = $this->post("/api/session/{$this->groupe}/start", ['playerName' => 'Bob', 'theme' => 'histoire']);
+        $this->assertSame([403, 'NON_LEADER'], [$refus['status'], $refus['body']['code']]);
+
+        $this->post("/api/session/{$this->groupe}/start", ['playerName' => 'Alice', 'theme' => 'histoire']);
+        $deja = $this->post("/api/session/{$this->groupe}/start", ['playerName' => 'Alice', 'theme' => 'histoire']);
+        $this->assertSame([409, 'PARTIE_DEMARREE'], [$deja['status'], $deja['body']['code']]);
+    }
+
+    /** Tout nom de groupe saisi par les joueurs reste une session du dossier des sessions. */
+    public function testNomDeGroupeQuelconque(): void
+    {
+        $dir = static::getContainer()->getParameter('kernel.project_dir');
+        $nom = '../../public/'.bin2hex(random_bytes(4));
+
+        $res = $this->post('/api/session/create', ['playerName' => 'Ana', 'sessionId' => $nom]);
+        $this->assertSame(200, $res['status']);
+        $this->assertSame($nom, $res['body']['session']['id']);
+        $this->assertFileDoesNotExist($dir.'/'.substr($nom, 6).'.json');
+        $this->assertFileExists($dir.'/var/cache/sessions/'.hash('sha256', $nom).'.json');
+
+        $trop = $this->post('/api/session/create', ['playerName' => 'Ana', 'sessionId' => str_repeat('x', 101)]);
+        $this->assertSame([400, 'SESSION_INVALIDE'], [$trop['status'], $trop['body']['code']]);
+    }
+
+    /** Les routes de maintenance (suppression de sessions) sont réservées à l'administration. */
+    public function testMaintenanceReserveeALAdmin(): void
+    {
+        $this->post('/api/session/create', ['playerName' => 'Ana', 'sessionId' => $this->groupe]);
+        $this->assertSame(401, $this->post('/api/sessions/clear', [])['status']);
+        $this->assertSame(401, $this->post("/api/session/{$this->groupe}/reset", [])['status']);
+
+        $this->client->request('GET', "/api/session/{$this->groupe}");
+        $this->assertResponseIsSuccessful();
+    }
+
     private function vieillirSession(int $secondes): void
     {
-        $file = static::getContainer()->getParameter('kernel.project_dir').'/var/cache/sessions/'.$this->groupe.'.json';
+        $file = static::getContainer()->getParameter('kernel.project_dir').'/var/cache/sessions/'.hash('sha256', $this->groupe).'.json';
         $session = json_decode(file_get_contents($file), true);
         $session['lastUpdate'] -= $secondes;
         file_put_contents($file, json_encode($session));
