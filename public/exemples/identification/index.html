@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exemple Navinum : identifier le joueur</title>
+    <!--
+        Exemple d'intégration du module d'authentification de @navinum/api, en JavaScript simple (sans React).
+        À copier dans un nouvel interactif : tout passe par la librairie (jamais d'appel direct à l'API).
+        Lancé par Navinum (?nv=…) : la partie est rattachée au joueur. Sans jeton : mode autonome.
+    -->
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 520px; margin: 40px auto; padding: 0 16px; color: #222; }
+        fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        input[type=text] { padding: 8px; width: 100%; box-sizing: border-box; margin: 6px 0 10px; }
+        button { padding: 8px 14px; margin-right: 6px; cursor: pointer; }
+        .erreur { background: #fdecea; border-left: 4px solid #f44336; padding: 10px; margin-bottom: 16px; }
+        .joueur { background: #f3f0ff; border-radius: 8px; padding: 12px; }
+        .discret { color: #777; font-size: 0.9em; }
+        [hidden] { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Identifier le joueur</h1>
+    <p class="discret" id="lancement">Chargement…</p>
+
+    <div class="erreur" id="erreur" hidden></div>
+
+    <fieldset id="formulaire">
+        <legend>Connexion (mode invité)</legend>
+        <label for="pseudo">Pseudo</label>
+        <input type="text" id="pseudo" maxlength="40" placeholder="2 à 40 caractères">
+        <label><input type="checkbox" id="borne"> Appareil partagé (borne) : ne rien conserver</label>
+        <p><button id="connecter">Se connecter</button></p>
+    </fieldset>
+
+    <div class="joueur" id="joueur" hidden>
+        <p><strong id="nom"></strong> <span class="discret" id="details"></span></p>
+        <p id="rattachement" class="discret"></p>
+        <p>
+            <button id="evenement">Envoyer un événement</button>
+            <button id="pas-moi">Ce n'est pas moi</button>
+            <button id="deconnecter">Se déconnecter</button>
+        </p>
+        <p id="gains" class="discret"></p>
+    </div>
+
+    <script src="/build/navinum-api.js"></script>
+    <script>
+        const api = new NavinumAPI();
+        const { erreurs } = NavinumAPI;
+        const $ = (id) => document.getElementById(id);
+
+        // Erreurs : le module donne titre, message et action ; la page choisit l'affichage
+        function afficherErreur(err) {
+            const info = erreurs.decrire(err);
+            $('erreur').textContent = `${info.titre} : ${info.message}`;
+            $('erreur').hidden = false;
+        }
+
+        // Affichage selon le joueur connecté (appelé à chaque connexion / déconnexion)
+        function afficherJoueur(joueur) {
+            $('formulaire').hidden = Boolean(joueur);
+            $('joueur').hidden = !joueur;
+            if (!joueur) return;
+            $('nom').textContent = joueur.pseudo;
+            $('details').textContent = `(${joueur.mode}${joueur.anonyme ? ', invité' : ''}, session jusqu'à ${new Date(joueur.expiresAt).toLocaleTimeString()})`;
+            $('rattachement').textContent = joueur.rattache === undefined
+                ? 'Mode autonome : pas de partie à rattacher.'
+                : (joueur.rattache ? 'Partie rattachée : les gains iront à ce joueur.' : `Partie non rattachée (${joueur.motif}) : les gains ne seront pas comptés.`);
+        }
+
+        api.auth.onChange(afficherJoueur);
+        api.gamification.onGains((gains) => {
+            const xp = gains.xp.reduce((total, gain) => total + gain.points, 0);
+            $('gains').textContent = `+${xp} XP, total ${gains.totalXp} XP` + (gains.medailles.length ? `, médaille : ${gains.medailles.map((m) => m.libelle).join(', ')}` : '');
+        });
+
+        $('connecter').addEventListener('click', async () => {
+            $('erreur').hidden = true;
+            try {
+                await api.auth.connecter({ pseudo: $('pseudo').value, memoriser: !$('borne').checked });
+            } catch (err) {
+                afficherErreur(err);
+            }
+        });
+        $('pas-moi').addEventListener('click', () => { api.auth.oublier(); $('pseudo').value = ''; });
+        $('deconnecter').addEventListener('click', () => api.auth.deconnecter());
+        $('evenement').addEventListener('click', async () => {
+            // Type déclaré dans le manifeste de l'interactif ; sans lancement Navinum : sans effet (null)
+            const gains = await api.gamification.evenement('exemple.clic', { score: 1 });
+            if (!gains) $('gains').textContent = 'Événement sans gain (mode autonome, joueur non rattaché ou aucune règle).';
+        });
+
+        (async () => {
+            try {
+                const ctx = await api.launch(); // null sans ?nv= dans l'URL
+                $('lancement').textContent = ctx
+                    ? `Lancé par Navinum : ${ctx.interactif.libelle}${ctx.parcours ? ' — ' + ctx.parcours.libelle : ''}`
+                    : 'Mode autonome (pas de jeton de lancement).';
+            } catch (err) {
+                $('lancement').textContent = '';
+                afficherErreur(err); // lien expiré ou invalide
+            }
+            // Joueur déjà venu sur cet appareil : pseudo proposé
+            $('pseudo').value = api.auth.joueur()?.pseudo ?? '';
+        })();
+    </script>
+</body>
+</html>

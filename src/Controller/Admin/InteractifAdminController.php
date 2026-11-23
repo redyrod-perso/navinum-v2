@@ -63,8 +63,14 @@ final class InteractifAdminController extends AbstractCrudController
                 $error = 'Jeton de sécurité invalide.';
             } else {
                 try {
-                    [$interactif, $created] = $this->importer->import($json);
+                    [$interactif, $created, $rapport] = $this->importer->import($json);
                     $this->addFlash('success', \sprintf('Interactif « %s » %s depuis son manifeste.', $interactif->getLibelle(), $created ? 'créé' : 'mis à jour'));
+                    if (!$created && [] !== $rapport['reglesAjoutees']) {
+                        $this->addFlash('info', 'Règles de gamification ajoutées depuis le manifeste : '.implode(', ', $rapport['reglesAjoutees']).' (vos réglages existants sont conservés).');
+                    }
+                    if ([] !== $rapport['medaillesCreees']) {
+                        $this->addFlash('info', 'Médailles créées : '.implode(', ', $rapport['medaillesCreees']).'.');
+                    }
 
                     return $this->redirectToRoute('admin_interactif_edit', ['id' => $interactif->getId()]);
                 } catch (\InvalidArgumentException $e) {

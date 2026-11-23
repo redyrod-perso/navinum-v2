@@ -754,6 +754,43 @@ connecté. Le stockage se règle avec l'option `storage` (`localStorage` par dé
 
 ---
 
+### Intégrer l'authentification dans un nouvel interactif
+
+Exemple complet en JavaScript simple (sans React), à copier : **`public/exemples/identification/index.html`**
+(en local : http://localhost:8002/exemples/identification/index.html). L'essentiel :
+
+```javascript
+const api = new NavinumAPI();
+const ctx = await api.launch();                        // null en mode autonome
+api.auth.onChange(joueur => afficher(joueur));          // connexion / déconnexion
+champPseudo.value = api.auth.joueur()?.pseudo ?? '';   // joueur déjà venu sur l'appareil
+
+try {
+    const joueur = await api.auth.connecter({ pseudo: champPseudo.value, memoriser: !borne });
+    if (joueur.rattache === false) prevenir(joueur.motif); // ex. DEJA_RATTACHE : gains non comptés
+} catch (err) {
+    afficherErreur(NavinumAPI.erreurs.decrire(err));     // titre + message, aucun HTML imposé
+}
+// « Ce n'est pas moi » : api.auth.oublier()   — fin de partie sur une borne : await api.auth.deconnecter()
+```
+
+### Ajouter un mode de connexion
+
+Chaque mode (invité aujourd'hui ; compte en ligne, OAuth, badge RFID à venir) suit le même contrat et délivre le
+même **jeton visiteur** : l'interactif n'a rien à changer.
+
+```javascript
+api.auth.ajouterMode('rfid', {
+    connecter: async (options, api) => ({ id, pseudo, anonyme, token, expiresAt }), // obligatoire
+    entretenir: async (joueur, { memoriser }, api) => joueurProlonge,                 // facultatif
+    deconnecter: async (joueur, api) => { /* révoquer */ },                            // facultatif (défaut : révocation du jeton)
+});
+await api.auth.connecter({ mode: 'rfid', badge: '042' });
+```
+
+`connecter()` peut aussi être une simple fonction (mode sans prolongation de session). Le mode invité
+(`modules/auth/ModeInvite.js`) est l'implémentation de référence.
+
 ## Gamification
 
 Module `api.gamification`, sans affichage. Les XP et médailles se décident côté serveur, selon les règles de

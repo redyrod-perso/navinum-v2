@@ -113,7 +113,10 @@ export class Erreurs {
         const status = erreur instanceof NavinumAPIError ? erreur.status : null;
         // Message du serveur : en français et plus précis que celui du catalogue
         const messageServeur = erreur instanceof NavinumAPIError ? ApiClient.serverMessage(erreur.body) : null;
-        const messageLocal = erreur instanceof NavinumAPIError && erreur.local ? erreur.message : null;
+        // Erreur levée par la librairie elle-même, sans réponse du serveur (ex. pseudo trop court vérifié avant
+        // l'appel) : son message est précis. Les erreurs réseau gardent le message du catalogue.
+        const messageLocal = erreur instanceof NavinumAPIError && !(erreur instanceof NetworkError)
+            && (erreur.local || erreur.body === null) && erreur.message ? erreur.message : null;
 
         return {
             code,

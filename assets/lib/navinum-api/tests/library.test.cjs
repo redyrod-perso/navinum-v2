@@ -697,3 +697,49 @@ test('multijoueur.groupes : logique de nom dans le module ; api.rfidGroupes ne f
 
     assert.equal((await api.rfidGroupes.findOrCreate('Classe 4B')).id, '2', 'alias obsolète toujours fonctionnel');
 });
+
+// --- #3 : modes de connexion branchables ---------------------------------------------------------
+
+test('auth : un mode branché fournit connecter, entretenir et deconnecter (contrat des futurs modes)', async () => {
+    const token = '9'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 200, body: { visiteur: { id: 'b' } } },
+        [`POST /api/launch/${token}/events`]: { status: 202, body: { accepted: true, gamification: null, rattache: true } },
+    });
+    const appels = [];
+    api.auth.ajouterMode('rfid', {
+        connecter: async ({ badge }) => { appels.push(`connecter:${badge}`); return { id: 'b', pseudo: 'Badge 42', anonyme: false, token: 'nvv2.badge' }; },
+        entretenir: async (joueur, { memoriser }) => { appels.push(`entretenir:${memoriser}`); return { ...joueur, token: 'nvv2.badge2' }; },
+        deconnecter: async (joueur) => { appels.push(`deconnecter:${joueur.token}`); },
+    });
+    assert.deepEqual(api.auth.modes(), ['invite', 'rfid']);
+
+    const ctx = await api.launch(token);
+    const joueur = await api.auth.connecter({ mode: 'rfid', badge: '042' });
+    assert.equal(joueur.mode, 'rfid');
+    assert.equal(joueur.rattache, true, 'même jeton visiteur : partie rattachée comme pour un invité');
+
+    await ctx.track('jeu.etape', {});
+    await flush();
+    assert.equal(api.auth.joueur().token, 'nvv2.badge2', 'prolongée par le mode rfid, pas par le mode invité');
+    await api.auth.deconnecter();
+    assert.deepEqual(appels, ['connecter:042', 'entretenir:true', 'deconnecter:nvv2.badge2']);
+
+    // Rétrocompatible : une simple fonction reste un mode valide (sans prolongation)
+    api.auth.ajouterMode('simple', async () => ({ id: 's', pseudo: 'S', token: 't' }));
+    assert.equal((await api.auth.connecter({ mode: 'simple', lancement: null })).pseudo, 'S');
+    assert.equal((await api.auth.entretenir()).token, 't');
+    assert.throws(() => api.auth.ajouterMode('casse', {}), NavinumAPI.ValidationError);
+});
+
+// Bug : une vérification locale de la librairie (avant tout appel) était décrite par le message générique
+// du catalogue (« Certaines informations sont invalides ») au lieu de son message précis.
+test('erreurs : le message d’une erreur levée par la librairie elle-même est conservé', async () => {
+    const api = makeApi({});
+    const err = await api.auth.connecter({ pseudo: 'A' }).catch((e) => e);
+    const info = NavinumAPI.erreurs.decrire(err);
+    assert.equal(info.code, 'VALIDATION');
+    assert.equal(info.message, 'Le pseudo doit faire entre 2 et 40 caractères');
+    assert.match(NavinumAPI.erreurs.decrire(new NavinumAPI.NetworkError('Timeout après 5000ms')).message, /ne répond pas/, 'réseau : message du catalogue');
+});
