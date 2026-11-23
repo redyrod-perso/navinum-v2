@@ -2,6 +2,8 @@ security:
     # https://symfony.com/doc/current/security.html#registering-the-user-hashing-passwords
     password_hashers:
         Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+        # Mots de passe des comptes visiteurs (#4)
+        visiteur: 'auto'
     # https://symfony.com/doc/current/security.html#loading-the-user-the-user-provider
     providers:
         # Comptes de l'espace d'administration (entité App\Entity\User)
@@ -24,6 +26,10 @@ security:
             pattern: ^/api(/|$)
             stateless: true
             provider: admin_users
+            # Jeton visiteur Bearer (tous modes de connexion) → ROLE_VISITEUR ; tolérant (voir VisiteurAuthenticator)
+            custom_authenticators:
+                - App\Security\VisiteurAuthenticator
+            entry_point: App\Security\VisiteurAuthenticator
         main:
             lazy: true
             provider: admin_users
@@ -61,3 +67,8 @@ when@test:
                 cost: 4 # Lowest possible value for bcrypt
                 time_cost: 3 # Lowest possible value for argon
                 memory_cost: 10 # Lowest possible value for argon
+            visiteur:
+                algorithm: auto
+                cost: 4
+                time_cost: 3
+                memory_cost: 10
