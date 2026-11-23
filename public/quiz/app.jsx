@@ -63,16 +63,11 @@ let launchContext = null;
 let manifestDefaults = {};
 
 /**
- * Envoie un événement à Navinum, uniquement si le quiz a été lancé avec un jeton.
- * Rend la réponse (dont `gamification`), ou null ; les erreurs n'interrompent jamais le jeu.
+ * Envoie un événement à Navinum (module gamification) : rend les gains (XP, médailles) ou null en mode
+ * autonome. Jamais bloquant : une erreur n'interrompt pas le jeu.
  */
 function track(type, payload = {}) {
-    if (!launchContext) return Promise.resolve(null);
-    return launchContext.track(type, payload)
-        .catch(err => {
-            console.warn(`[Quiz] Événement ${type} non envoyé:`, err);
-            return null;
-        });
+    return api.gamification.evenement(type, payload);
 }
 
 /**
@@ -202,6 +197,8 @@ function QuizApp() {
                     }
                 } else {
                     console.log('[Quiz] Mode autonome : configuration par défaut de navinum.json');
+                    // Joueur déjà venu sur ce navigateur (hors borne : la borne n'a pas de lien de lancement autonome)
+                    if (api.auth.joueur()?.pseudo) setPlayerName(api.auth.joueur().pseudo);
                 }
                 if (config.themes.length === 0) {
                     setConfigError(erreurs.decrire(erreurs.creer('VALIDATION', 'Aucun thème configuré pour ce quiz.')));
@@ -286,8 +283,8 @@ function QuizApp() {
                 victoire: winner !== null && winner === playerName,
                 joueurs: players.length,
                 duree: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null
-            }).then(res => {
-                setGains(res && res.gamification ? res.gamification : null);
+            }).then(gains => {
+                setGains(gains);
                 // Borne : le joueur suivant ne doit pas jouer sous ce nom
                 if (configRef.current && configRef.current.modeBorne) api.auth.deconnecter();
             });
