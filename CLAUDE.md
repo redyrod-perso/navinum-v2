@@ -54,8 +54,9 @@ public/
 # Librairie API JavaScript
 assets/lib/navinum-api/
 ├── src/
-│   ├── core/              # Composants core (ApiClient, Config, Errors)
-│   ├── resources/         # APIs par ressource (Session, Exposition, etc.)
+│   ├── core/              # Socle (ApiClient, Config, Errors, Realtime)
+│   ├── resources/         # Appels HTTP par ressource du serveur (Session, Visiteur…), sans logique
+│   ├── modules/           # Modules réutilisables sans HTML : erreurs/, auth/, gamification/ (multijoueur/ à venir)
 │   └── index.js           # Point d'entrée
 ├── dist/                  # Builds générés (dev + prod)
 ├── README.md              # Documentation complète
@@ -318,7 +319,9 @@ api.visiteurs.oublier()
 api.launch()                         // ctx.track(), ctx.identify(), ctx.onConfigChange()
 api.interactifs.chargerManifeste()   // { manifest, defaults }
 
-// Modules transverses
+// Modules réutilisables (sans HTML ni design ; points d'entrée @navinum/api/erreurs|auth|gamification)
+api.gamification.evenement(type, payload)  // gains { xp, medailles, totalXp } ou null, jamais bloquant
+api.gamification.onGains(cb) / demanderMedaille() / bilan()
 api.auth.connecter({ pseudo })       // joueur + jeton visiteur, partie lancée rattachée automatiquement
 api.auth.joueur() / deconnecter()
 NavinumAPI.erreurs.decrire(err)      // { code, titre, message, reessayable, action, … } — aucun affichage
