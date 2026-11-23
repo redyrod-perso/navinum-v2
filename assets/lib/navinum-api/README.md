@@ -275,6 +275,18 @@ stop();
 await api.sessions.leave('Classe 4B', { playerName: 'Léa' });
 ```
 
+#### Nombre maximum de joueurs (imposé par le serveur)
+
+Transmettre le jeton de lancement à `create()` / `join()` : le serveur applique `joueursMax` de la configuration du
+parcours (8 sans jeton, 50 au plus) et refuse le joueur suivant avec `GROUPE_COMPLET`.
+
+```javascript
+await api.sessions.join('Classe 4B', { playerName: 'Léa', launchToken: NavinumAPI.getLaunchToken() });
+```
+
+`updateScore()` n'accepte qu'une progression plausible : partie en cours, joueur du groupe, +1 au plus par appel
+(sinon `SCORE_REFUSE`).
+
 Les noms de groupe sont encodés dans l'URL (`?`, `#`, espaces, accents…). `reset()` et `clearAll()` sont réservés à
 l'administration.
 
@@ -600,6 +612,18 @@ await api.launches.sendEvent('abc123', 'quiz.completed', { score: 8 }); // POST 
 
 ---
 
+#### Médaille demandée par l'interactif
+
+```javascript
+const ctx = await api.launch();
+await api.auth.connecter({ pseudo: 'Léa' });          // le visiteur doit être rattaché au lancement
+const { medaille, nouvelle, totalXp } = await ctx.demanderMedaille('Explorateur');
+```
+
+Anti-triche : seules les médailles listées dans `attribuables` des règles de gamification de l'interactif
+(admin › Interactifs › 🏆, ou manifeste) sont accordées (`MEDAILLE_NON_ATTRIBUABLE` sinon). Idempotent : une médaille
+unique s'obtient une fois par visiteur (`nouvelle: false` ensuite), une autre au plus une fois par partie.
+
 ### Log Visites (Analytics, Tracking)
 
 #### Enregistrer une action
@@ -727,6 +751,9 @@ Le serveur peut imposer le code : `{ "error": "…", "code": "PARTIE_EN_COURS" }
 | `PARTIE_DEMARREE` | la partie a déjà commencé | non | `AUCUNE` |
 | `GROUPE_COMPLET` | groupe complet | non | `CHOISIR_AUTRE_GROUPE` |
 | `NON_LEADER` | action réservée au leader | non | `AUCUNE` |
+| `SCORE_REFUSE` | score non plausible (hors partie, saut de plus d'un point) | non | `AUCUNE` |
+| `MEDAILLE_NON_ATTRIBUABLE` | médaille absente des `attribuables` de l'interactif | non | `AUCUNE` |
+| `MEDAILLE_INCONNUE` | médaille inexistante | non | `AUCUNE` |
 | `MODE_INDISPONIBLE` | mode de connexion pas encore disponible | non | `AUCUNE` |
 | `INCONNU` | tout le reste | oui | `REESSAYER` |
 

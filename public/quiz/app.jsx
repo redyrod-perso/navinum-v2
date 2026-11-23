@@ -446,29 +446,18 @@ function QuizApp() {
             // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
             await identifyPlayer(nom);
 
-            // 0. Groupe complet ? (joueursMax de la configuration)
-            try {
-                const existing = await api.sessions.get(groupe);
-                const existingPlayers = (existing && existing.session && existing.session.players) || [];
-                const alreadyIn = existingPlayers.some(p => p.name === nom);
-                if (!alreadyIn && existingPlayers.length >= config.joueursMax) {
-                    throw erreurs.creer('GROUPE_COMPLET', `Ce groupe est complet (${config.joueursMax} joueurs maximum) : choisissez-en un autre.`);
-                }
-            } catch (err) {
-                // Session pas encore créée : elle le sera plus bas
-                if (!erreurs.est(err, 'SESSION_INTROUVABLE', 'INTROUVABLE')) throw err;
-            }
-
             // 1. Retrouver le groupe par son nom, ou le créer
             await api.rfidGroupes.findOrCreate(groupe);
 
-            // 2. Rejoindre la session du groupe, ou la créer
+            // 2. Rejoindre la session du groupe, ou la créer. Le jeton de lancement permet au serveur
+            //    d'imposer le nombre maximum de joueurs du parcours (refus : GROUPE_COMPLET).
+            const launchToken = LAUNCH_TOKEN || undefined;
             let data;
             try {
-                data = await api.sessions.join(groupe, { playerName: nom });
+                data = await api.sessions.join(groupe, { playerName: nom, launchToken });
             } catch (err) {
                 if (!(err instanceof NotFoundError)) throw err;
-                data = await api.sessions.create({ playerName: nom, sessionId: groupe, rfidGroupeName: groupe });
+                data = await api.sessions.create({ playerName: nom, sessionId: groupe, rfidGroupeName: groupe, launchToken });
             }
 
             if (!data.session || !data.session.players) {
@@ -479,7 +468,7 @@ function QuizApp() {
             setPlayers(data.session.players);
             setStage('lobby');
         } catch (err) {
-            // Partie en cours, groupe complet, réseau… : titre, message et « Réessayer » si pertinent
+            // Partie en cours, groupe complet (imposé par le serveur), réseau… : titre, message, « Réessayer »
             afficherErreur(err, joinGlobalSession);
         } finally {
             setBusy(false);

@@ -7,6 +7,16 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.7.0] - 2026-11-23
+
+### Added
+- `ctx.demanderMedaille(libelle)` / `api.launches.demanderMedaille(token, libelle)` : médaille demandée par
+  l'interactif (`POST /api/launch/{jeton}/medailles`), limitée aux médailles `attribuables` de ses règles (#8).
+- `sessions.create()` / `join()` acceptent `launchToken` : le serveur impose `joueursMax` du lancement (#17).
+- Codes d'erreur `SCORE_REFUSE`, `MEDAILLE_NON_ATTRIBUABLE`, `MEDAILLE_INCONNUE`.
+
+---
+
 ## [0.6.0] - 2026-11-22
 
 Deux modules transverses pour tous les interactifs : erreurs et authentification.

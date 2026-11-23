@@ -1,6 +1,6 @@
 {
   "name": "@navinum/api",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Navinum API Client - Librairie JavaScript pour interagir avec les APIs Symfony Navinum",
   "main": "dist/navinum-api.js",
   "module": "src/index.js",

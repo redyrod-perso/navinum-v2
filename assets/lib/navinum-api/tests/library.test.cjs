@@ -377,3 +377,26 @@ test('auth : rattachement refusé non bloquant ; modes à venir et personnalisé
     api.auth.ajouterMode('casse', async () => ({ id: 'c', pseudo: 'C' }));
     await assert.rejects(() => api.auth.connecter({ mode: 'casse' }), NavinumAPI.ValidationError);
 });
+
+// --- Médaille demandée par l'interactif ----------------------------------------------------------
+
+test('ctx.demanderMedaille : POST /medailles, refus décrits par le module d’erreurs', async () => {
+    const token = 'c'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: { id: 'v1' }, mercure: null } },
+        [`POST /api/launch/${token}/medailles`]: (call) => (call.body.medaille === 'Explorateur'
+            ? { status: 200, body: { medaille: { libelle: 'Explorateur' }, nouvelle: true, totalXp: 10 } }
+            : { status: 403, body: { error: 'La médaille « Or » ne peut pas être attribuée par cet interactif.', code: 'MEDAILLE_NON_ATTRIBUABLE' } }),
+    });
+    const ctx = await api.launch(token);
+    const ok = await ctx.demanderMedaille(' Explorateur ');
+    assert.equal(ok.nouvelle, true);
+    assert.deepEqual(fetch.calls.at(-1).body, { medaille: 'Explorateur' });
+
+    const refus = await ctx.demanderMedaille('Or').catch((e) => e);
+    const info = NavinumAPI.erreurs.decrire(refus);
+    assert.equal(info.code, 'MEDAILLE_NON_ATTRIBUABLE');
+    assert.match(info.message, /Or/);
+    await assert.rejects(() => ctx.demanderMedaille(''), NavinumAPI.ValidationError);
+    assert.equal(NavinumAPI.erreurs.decrire(NavinumAPI.erreurs.creer('SCORE_REFUSE')).titre, 'Score refusé');
+});
