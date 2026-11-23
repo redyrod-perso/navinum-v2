@@ -1,6 +1,6 @@
 {
   "name": "@navinum/api",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Navinum API Client - Librairie JavaScript pour interagir avec les APIs Symfony Navinum",
   "main": "dist/navinum-api.js",
   "module": "src/index.js",
@@ -12,6 +12,8 @@
     "./erreurs": "./src/modules/erreurs/index.js",
     "./auth": "./src/modules/auth/index.js",
     "./gamification": "./src/modules/gamification/index.js",
+    "./multijoueur": "./src/modules/multijoueur/index.js",
+    "./react": "./src/react/index.js",
     "./dist/*": "./dist/*",
     "./package.json": "./package.json"
   },

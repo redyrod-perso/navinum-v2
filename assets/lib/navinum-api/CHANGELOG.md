@@ -7,6 +7,24 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.10.0] - 2026-11-24
+
+Modules réutilisables, partie 2 (#53).
+
+### Added
+- **Module multijoueur** `api.multijoueur` : `partie({ objectif })` → `rejoindre()`, `demarrer()`, `marquerPoint()`,
+  `terminer()`, `quitter()`, `etat()`, `onChange()` ; `groupes()`, `onGroupeCree()`. Logique extraite du quiz
+  (lobby, leader, démarrage synchronisé, scores en direct, premier à l'objectif gagnant, départ à la fermeture).
+- **Couche React facultative** : `NavinumAPI.creerHooksReact(React)` → `usePartie`, `useJoueur`, `useGains`.
+- Points d'entrée `@navinum/api/multijoueur` et `@navinum/api/react`.
+
+### Fixed
+- `rfidGroupes.list()` ne rendait que les 30 premiers groupes (pagination API Platform) : un groupe récent
+  n'apparaissait pas dans les listes, et `findByNom()` / `findOrCreate()` pouvaient le manquer. Toutes les pages
+  sont désormais lues.
+
+---
+
 ## [0.9.0] - 2026-11-24
 
 Modules réutilisables, partie 1 (#53).
