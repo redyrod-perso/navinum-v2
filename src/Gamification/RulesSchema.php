@@ -15,7 +15,8 @@ use Symfony\Component\ExpressionLanguage\SyntaxError;
  *   ],
  *   "medailles": [
  *     { "medaille": "Sans faute", "evenement": "quiz.completed", "si": "score == total" }
- *   ]
+ *   ],
+ *   "attribuables": ["Explorateur"]
  * }
  *
  * - `evenement` : type exact (`quiz.completed`) ou préfixe suivi de `*` (`quiz.*`).
@@ -23,6 +24,8 @@ use Symfony\Component\ExpressionLanguage\SyntaxError;
  * - `si` : condition facultative (expression).
  * - `typologie` : facultative, « Général » par défaut.
  * - `medaille` : libellé d'une médaille existante (créée dans l'admin ou par le manifeste).
+ * - `attribuables` : médailles que l'interactif peut demander lui-même (`POST /api/launch/{jeton}/medailles`) ;
+ *   aucune par défaut (anti-triche : une médaille absente de cette liste est refusée).
  *
  * Ce schéma sert à la fois au formulaire généré de l'admin et à la validation côté serveur.
  */
@@ -65,6 +68,13 @@ final class RulesSchema
                             'si' => $expression + ['title' => 'Condition', 'description' => 'Ex. score == total, ou victoire'],
                         ],
                     ],
+                    'default' => [],
+                ],
+                'attribuables' => [
+                    'type' => 'array',
+                    'title' => "Médailles attribuables par l'interactif",
+                    'description' => "Médailles que l'interactif peut demander lui-même via l'API (aucune par défaut).",
+                    'items' => ['type' => 'string', 'title' => 'Médaille', 'minLength' => 1],
                     'default' => [],
                 ],
             ],
