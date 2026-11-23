@@ -86,6 +86,7 @@ bin/console debug:router | grep api           # Routes API
 bin/console app:user:create admin@exemple.fr --admin            # compte administrateur
 bin/console app:user:create musee@exemple.fr --organisateur="Musée X"
 bin/console app:interactif:import public/quiz/navinum.json       # enregistre/maj un interactif depuis son manifeste
+bin/console app:interactif:import public/quiz/navinum.json --dry-run  # montre ce qui serait ajouté, sans rien écrire
 
 # Base de données
 bin/console doctrine:migrations:migrate
@@ -597,8 +598,10 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 - Fonctionne **sans n8n ni Internet**. Une règle qui ne s'applique pas (variable absente, expression en erreur, médaille
   inconnue) est ignorée et journalisée, jamais bloquante.
 - **Typologies** : facultatives, « Général » par défaut (créée automatiquement). Admin › Gamification : Médailles, Typologies.
-- **Manifeste** : section `gamification` `{ regles, medailles }` ; à l'import, les règles par défaut ne sont posées que si
-  l'interactif n'en a pas (jamais d'écrasement des réglages de l'admin), les médailles absentes sont créées.
+- **Manifeste** : section `gamification` `{ regles, medailles }` ; à l'import, jamais d'écrasement des réglages de
+  l'admin : un interactif sans règles reçoit celles du manifeste, sinon **seules les clés absentes** sont ajoutées
+  (ex. nouvelle règle `scoreSession`) — une clé présente, même vide, est conservée (#63). Les médailles absentes sont
+  créées. Rapport dans la commande et l'admin ; `app:interactif:import … --dry-run` montre l'effet sans rien écrire.
 - **Médaille demandée par l'interactif** (#8) : `POST /api/launch/{jeton}/medailles` `{medaille}` (JS :
   `ctx.demanderMedaille()`), visiteur rattaché requis, médaille listée dans `attribuables` des règles (anti-triche ;
   aucune par défaut), idempotent (unique : une fois par visiteur ; sinon une fois par partie), tracé dans le
@@ -607,8 +610,7 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 - **Scores contrôlés par le serveur** (#57) : règle `scoreSession` (ex. `["quiz.completed"]`) — pour ces événements,
   `SessionScoreVerifier` reprend `score`, `total` (questions du thème d'après la configuration du lancement) et
   `victoire` de la session multijoueur (`payload.groupe`, `payload.joueur`), contrôlée point par point ; sans session
-  retrouvée : score 0, `verifie: false`. L'import du manifeste n'ajoute pas cette règle à un interactif qui a déjà
-  des règles : l'ajouter dans l'admin (Interactifs › 🏆).
+  retrouvée : score 0, `verifie: false`.
 - Joueur non rattaché à un lancement réutilisé (#56) : ni gains, ni événements dans le journal du titulaire ; ses
   événements vont dans son propre `LogVisite` (`connection` = `launch:<jeton>:<visiteur>`).
 - À venir : webhooks n8n (#10).

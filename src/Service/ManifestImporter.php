@@ -23,6 +23,10 @@ use Doctrine\ORM\EntityManagerInterface;
  *   }
  * }
  * L'interactif est retrouvé par son libellé (créé s'il n'existe pas).
+ *
+ * Règles de gamification : jamais d'écrasement des réglages de l'admin. Un interactif sans règles reçoit celles
+ * du manifeste ; un interactif qui en a déjà reçoit **seulement les clés absentes** (ex. une nouvelle règle
+ * `scoreSession` apportée par une nouvelle version du manifeste). Une clé présente, même vide, est conservée.
  */
 final class ManifestImporter
 {
@@ -33,11 +37,14 @@ final class ManifestImporter
     }
 
     /**
-     * @return array{0: Interactif, 1: bool} l'interactif et true s'il vient d'être créé
+     * @param bool $simulation true : rien n'est enregistré, seul le rapport est calculé (`--dry-run`)
+     *
+     * @return array{0: ?Interactif, 1: bool, 2: array{libelle: string, reglesAjoutees: list<string>, medaillesCreees: list<string>}}
+     *         l'interactif (null en simulation d'une création), true s'il est (ou serait) créé, et le rapport
      *
      * @throws \InvalidArgumentException si le manifeste est invalide
      */
-    public function import(string $json, ?Interactif $target = null): array
+    public function import(string $json, ?Interactif $target = null, bool $simulation = false): array
     {
         $manifest = json_decode($json, true);
         if (!\is_array($manifest)) {
@@ -65,6 +72,24 @@ final class ManifestImporter
 
         $interactif = $target ?? $this->interactifs->findOneBy(['libelle' => $libelle]);
         $created = null === $interactif;
+
+        $regles = null !== $gamification && \is_array($gamification['regles'] ?? null) ? RulesSchema::normalize($gamification['regles']) : null;
+        $existantes = $interactif?->getGamification();
+        $reglesAjoutees = null === $regles ? [] : (null === $existantes
+            ? array_keys($regles)
+            : array_values(array_diff(array_keys($regles), array_keys($existantes))));
+        $medaillesCreees = [];
+        foreach (null !== $gamification ? ($gamification['medailles'] ?? []) : [] as $definition) {
+            $nom = \is_array($definition) ? trim((string) ($definition['libelle'] ?? '')) : '';
+            if ('' !== $nom && !\in_array($nom, $medaillesCreees, true) && null === $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $nom])) {
+                $medaillesCreees[] = $nom;
+            }
+        }
+        $rapport = ['libelle' => $libelle, 'reglesAjoutees' => $reglesAjoutees, 'medaillesCreees' => $medaillesCreees];
+        if ($simulation) {
+            return [$interactif, $created, $rapport];
+        }
+
         $interactif ??= new Interactif();
 
         $interactif->setLibelle($libelle);
@@ -90,16 +115,19 @@ final class ManifestImporter
         $this->em->persist($interactif);
 
         if (null !== $gamification) {
-            // Règles par défaut : uniquement si l'admin n'en a pas encore défini (jamais d'écrasement)
-            if (null === $interactif->getGamification() && isset($gamification['regles'])) {
-                $interactif->setGamification(RulesSchema::normalize($gamification['regles']));
+            // Règles : celles du manifeste si l'interactif n'en a pas ; sinon seulement les clés absentes
+            if (null !== $regles && [] !== $reglesAjoutees) {
+                $interactif->setGamification(null === $existantes
+                    ? $regles
+                    : $existantes + array_intersect_key($regles, array_flip($reglesAjoutees)));
             }
             // Médailles déclarées : créées si absentes (rattachées à l'interactif)
             foreach ($gamification['medailles'] ?? [] as $definition) {
                 $nom = \is_array($definition) ? trim((string) ($definition['libelle'] ?? '')) : '';
-                if ('' === $nom || null !== $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $nom])) {
+                if (!\in_array($nom, $medaillesCreees, true)) {
                     continue;
                 }
+                $medaillesCreees = array_values(array_diff($medaillesCreees, [$nom])); // une seule fois
                 $this->em->persist((new Medaille())
                     ->setLibelle($nom)
                     ->setDescription(isset($definition['description']) ? (string) $definition['description'] : null)
@@ -111,6 +139,6 @@ final class ManifestImporter
 
         $this->em->flush();
 
-        return [$interactif, $created];
+        return [$interactif, $created, $rapport];
     }
 }
