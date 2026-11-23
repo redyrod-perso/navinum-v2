@@ -795,8 +795,10 @@ await partie.marquerPoint();                    // bonne réponse : +1 (contrôl
 partie.terminer();                              // fini sans atteindre l'objectif
 await partie.quitter();                         // aussi automatique à la fermeture de la page
 
-await api.multijoueur.groupes();                // groupes existants (toutes les pages)
-api.multijoueur.onGroupeCree(g => …);           // groupes créés en direct
+const { groupes } = api.multijoueur;
+await groupes.lister();                          // groupes existants (toutes les pages)
+groupes.onCree(g => …);                          // groupes créés en direct
+await groupes.trouverOuCreer('Classe 4B');       // par nom exact, créé s'il n'existe pas (fait par rejoindre())
 ```
 
 - Le jeton de lancement (`api.launch()`) est transmis : le serveur impose le nombre maximum de joueurs du parcours.

@@ -13,10 +13,19 @@ Modules réutilisables, partie 2 (#53).
 
 ### Added
 - **Module multijoueur** `api.multijoueur` : `partie({ objectif })` → `rejoindre()`, `demarrer()`, `marquerPoint()`,
-  `terminer()`, `quitter()`, `etat()`, `onChange()` ; `groupes()`, `onGroupeCree()`. Logique extraite du quiz
+  `terminer()`, `quitter()`, `etat()`, `onChange()` ; `api.multijoueur.groupes` (`lister()`, `trouver()`,
+  `trouverOuCreer()`, `onCree()`). Logique extraite du quiz
   (lobby, leader, démarrage synchronisé, scores en direct, premier à l'objectif gagnant, départ à la fermeture).
 - **Couche React facultative** : `NavinumAPI.creerHooksReact(React)` → `usePartie`, `useJoueur`, `useGains`.
 - Points d'entrée `@navinum/api/multijoueur` et `@navinum/api/react`.
+
+### Changed
+- `resources/RfidGroupeAPI.js` ne fait plus que les appels HTTP (`list`, `create`, `onCreated`) ; la recherche par
+  nom et la création à la demande passent dans le module multijoueur (`api.multijoueur.groupes`).
+
+### Deprecated
+- `api.rfidGroupes.findByNom()` et `findOrCreate()` : utiliser `api.multijoueur.groupes.trouver()` et
+  `trouverOuCreer()`.
 
 ### Fixed
 - Un lien de lancement réutilisé par un autre joueur, alors que le précédent était encore actif, créditait le

@@ -15,14 +15,15 @@ const LD_JSON = { 'Content-Type': 'application/ld+json', Accept: 'application/ld
  */
 
 /**
- * Groupes de visiteurs (`/api/rfid_groupes`, API Platform).
+ * Appels HTTP des groupes de visiteurs (`/api/rfid_groupes`, API Platform), sans logique de jeu.
  *
- * Lecture et création publiques ; modification et suppression réservées à l'admin.
+ * Lecture et création publiques ; modification et suppression réservées à l'admin. Pour les jeux,
+ * utiliser le module multijoueur : `api.multijoueur.groupes` (retrouver un groupe par son nom ou le créer).
  *
  * @class
  * @example
  * const groupes = await api.rfidGroupes.list();
- * const groupe = await api.rfidGroupes.findByNom('Classe 4B') ?? await api.rfidGroupes.create('Classe 4B');
+ * const cree = await api.rfidGroupes.create('Classe 4B');
  * const stop = api.rfidGroupes.onCreated(g => console.log('Nouveau groupe', g.nom));
  */
 export class RfidGroupeAPI {
@@ -56,18 +57,6 @@ export class RfidGroupeAPI {
     }
 
     /**
-     * Cherche un groupe par son nom exact.
-     *
-     * @param {string} nom - Nom du groupe
-     * @returns {Promise<RfidGroupe|null>} Le groupe, ou null s'il n'existe pas
-     */
-    async findByNom(nom) {
-        const value = RfidGroupeAPI.normalizeNom(nom);
-        const groupes = await this.list({ nom: value });
-        return groupes.find(g => g.nom === value) || null;
-    }
-
-    /**
      * Crée un groupe.
      *
      * @param {string} nom - Nom du groupe (unique)
@@ -79,13 +68,21 @@ export class RfidGroupeAPI {
     }
 
     /**
-     * Retourne le groupe portant ce nom, en le créant s'il n'existe pas.
-     *
-     * @param {string} nom - Nom du groupe
+     * @deprecated Depuis 0.10.0 : utiliser `api.multijoueur.groupes.trouver(nom)`.
+     * @param {string} nom
+     * @returns {Promise<RfidGroupe|null>}
+     */
+    async findByNom(nom) {
+        return this.groupes.trouver(nom);
+    }
+
+    /**
+     * @deprecated Depuis 0.10.0 : utiliser `api.multijoueur.groupes.trouverOuCreer(nom)`.
+     * @param {string} nom
      * @returns {Promise<RfidGroupe>}
      */
     async findOrCreate(nom) {
-        return (await this.findByNom(nom)) || this.create(nom);
+        return this.groupes.trouverOuCreer(nom);
     }
 
     /**

@@ -327,7 +327,7 @@ function QuizApp() {
 
     // Charger les groupes existants (via la librairie Navinum)
     const loadGroups = () => {
-        api.rfidGroupes.list()
+        api.multijoueur.groupes.lister()
             .then(groupes => setExistingGroups(groupes))
             .catch(err => {
                 setExistingGroups([]);
@@ -347,7 +347,7 @@ function QuizApp() {
         if (stage !== 'home') {
             return;
         }
-        return api.rfidGroupes.onCreated(groupe => {
+        return api.multijoueur.groupes.onCree(groupe => {
             console.log('Nouveau groupe créé:', groupe.nom);
             loadGroups();
         });

@@ -324,6 +324,8 @@ api.interactifs.chargerManifeste()   // { manifest, defaults }
 api.gamification.evenement(type, payload)  // gains { xp, medailles, totalXp } ou null, jamais bloquant
 api.gamification.onGains(cb) / demanderMedaille() / bilan()
 api.multijoueur.partie({ objectif })      // rejoindre(), demarrer(), marquerPoint(), terminer(), quitter(), onChange()
+api.multijoueur.groupes                   // lister(), onCree(), trouver(), trouverOuCreer()
+// Règle : resources/ = appels HTTP seulement ; toute logique (session, groupes par nom…) dans modules/
 NavinumAPI.creerHooksReact(React)         // usePartie, useJoueur, useGains (hooks facultatifs)
 api.auth.connecter({ pseudo })       // joueur + jeton visiteur, partie lancée rattachée automatiquement
 api.auth.joueur() / deconnecter()

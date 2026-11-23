@@ -78,6 +78,7 @@ export class NavinumAPI {
         this.gamification = new Gamification(this);
         /** Parties multijoueur : groupe, lobby, scores, gagnant (voir {@link Partie}). */
         this.multijoueur = new Multijoueur(this);
+        this.rfidGroupes.groupes = this.multijoueur.groupes; // alias obsolètes api.rfidGroupes.findByNom()/findOrCreate()
         /** Dernier contexte de lancement résolu par {@link NavinumAPI#launch} (null en mode autonome). */
         this.contexte = null;
     }

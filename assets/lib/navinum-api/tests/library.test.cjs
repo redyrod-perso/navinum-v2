@@ -681,3 +681,19 @@ test('gains : les événements portent le jeton du joueur ; lancement rattaché 
     assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv2.bob');
     assert.equal(api.gamification.bilan().xp, 5, 'seuls les gains réels sont cumulés');
 });
+
+test('multijoueur.groupes : logique de nom dans le module ; api.rfidGroupes ne fait que les appels HTTP', async () => {
+    const api = makeApi({
+        'GET /api/rfid_groupes': { status: 200, contentType: 'application/ld+json', body: { member: [{ id: '1', nom: 'Classe 4B bis' }, { id: '2', nom: 'Classe 4B' }] } },
+        'POST /api/rfid_groupes': (call) => ({ status: 201, contentType: 'application/ld+json', body: { id: '3', nom: call.body.nom } }),
+    });
+    const { groupes } = api.multijoueur;
+    assert.equal((await groupes.trouver(' Classe 4B ')).id, '2', 'nom exact, espaces ignorés');
+    assert.equal((await groupes.trouverOuCreer('Classe 4B')).id, '2', 'existant : pas de création');
+    assert.deepEqual(await groupes.trouverOuCreer(' Duo '), { id: '3', nom: 'Duo' });
+    assert.equal(fetch.calls.filter((c) => c.method === 'POST').length, 1);
+    await assert.rejects(() => groupes.trouver('  '), NavinumAPI.ValidationError);
+    assert.equal((await groupes.lister()).length, 2);
+
+    assert.equal((await api.rfidGroupes.findOrCreate('Classe 4B')).id, '2', 'alias obsolète toujours fonctionnel');
+});

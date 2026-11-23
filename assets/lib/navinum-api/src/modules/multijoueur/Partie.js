@@ -1,6 +1,7 @@
 import { ValidationError } from '../../core/Errors.js';
 import { NotFoundError } from '../../core/Errors.js';
 import { erreurs } from '../erreurs/Erreurs.js';
+import { Groupes } from './Groupes.js';
 
 /**
  * Joueur d'une partie.
@@ -101,7 +102,7 @@ export class Partie {
         if (!g) throw erreurs.creer('VALIDATION', 'Veuillez choisir ou créer un groupe.');
         if (this.courant.etape !== 'hors') await this.quitter();
 
-        await this.api.rfidGroupes.findOrCreate(g);
+        await this.api.multijoueur.groupes.trouverOuCreer(g);
         const launchToken = this.api.contexte ? this.api.contexte.token : undefined;
         let data;
         try {
@@ -263,6 +264,8 @@ export class Multijoueur {
     /** @param {NavinumAPI} api */
     constructor(api) {
         this.api = api;
+        /** Groupes : lister, suivre en direct, retrouver ou créer par nom (voir {@link Groupes}). */
+        this.groupes = new Groupes(api.rfidGroupes);
     }
 
     /**
@@ -272,20 +275,6 @@ export class Multijoueur {
      */
     partie(options = {}) {
         return new Partie(this.api, options);
-    }
-
-    /** Groupes existants. @returns {Promise<Array<{id: string, nom: string}>>} */
-    async groupes() {
-        return this.api.rfidGroupes.list();
-    }
-
-    /**
-     * Groupes créés en direct (Mercure).
-     * @param {function({id: string, nom: string}): void} callback
-     * @returns {function(): void} Fonction de désabonnement
-     */
-    onGroupeCree(callback) {
-        return this.api.rfidGroupes.onCreated(callback);
     }
 }
 
