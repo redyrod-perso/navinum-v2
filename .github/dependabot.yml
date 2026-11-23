@@ -7,6 +7,10 @@ updates:
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
     labels: [dependencies]
+    # Symfony 8 : montée de version complète et coordonnée dans #46, pas composant par composant
+    ignore:
+      - dependency-name: "symfony/*"
+        update-types: ["version-update:semver-major"]
     groups:
       symfony:
         patterns: ["symfony/*"]
@@ -18,6 +22,10 @@ updates:
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
     labels: [dependencies]
+    # Babel 8 : à traiter avec la montée de version de la chaîne de build (#46)
+    ignore:
+      - dependency-name: "@babel/*"
+        update-types: ["version-update:semver-major"]
     groups:
       js-mineures:
         update-types: [minor, patch]
