@@ -6,8 +6,8 @@ import {
     NotFoundError,
     GoneError,
     ServerError
-} from '../core/Errors.js';
-import { ApiClient } from '../core/ApiClient.js';
+} from '../../core/Errors.js';
+import { ApiClient } from '../../core/ApiClient.js';
 
 /**
  * Actions conseillées à l'interactif (il choisit comment les présenter).

@@ -1,5 +1,7 @@
-import { ValidationError } from '../core/Errors.js';
-import { erreurs } from './Erreurs.js';
+import { ValidationError } from '../../core/Errors.js';
+import { erreurs } from '../erreurs/Erreurs.js';
+import { ModeInvite } from './ModeInvite.js';
+import { Stockage } from './Stockage.js';
 
 /**
  * Joueur connecté : profil public et jeton visiteur.
@@ -28,7 +30,7 @@ const MODES_A_VENIR = ['compte', 'oauth', 'rfid'];
  * Module d'authentification des joueurs, partagé par tous les interactifs.
  *
  * Une seule API quel que soit le mode : `await api.auth.connecter({ mode, … })` rend un joueur et
- * son **jeton visiteur** (`nvv1.…`). Si l'interactif a été lancé par Navinum (`api.launch()`), la
+ * son **jeton visiteur** (`nvv2.…`). Si l'interactif a été lancé par Navinum (`api.launch()`), la
  * partie est rattachée automatiquement au joueur : ses événements alimentent son parcours et sa
  * gamification.
  *
@@ -58,10 +60,11 @@ export class Auth {
         this.api = api;
         this.fournisseurs = new Map();
         this.ecouteurs = [];
-        this.ajouterMode('invite', async ({ pseudo, memoriser }) => {
-            const visiteur = await api.visiteurs.identifier(pseudo, { memoriser });
-            return { ...visiteur };
-        });
+        /** Joueur conservé sur l'appareil. */
+        this.stockage = new Stockage(api.config);
+        /** Mode « invité » (pseudo seul). */
+        this.modeInvite = new ModeInvite(api.visiteurs, this.stockage);
+        this.ajouterMode('invite', async ({ pseudo, memoriser }) => ({ ...(await this.modeInvite.connecter({ pseudo, memoriser })) }));
     }
 
     /**
@@ -153,7 +156,7 @@ export class Auth {
      */
     joueur() {
         if (this.joueurCourant) return this.joueurCourant;
-        const conserve = this.api.visiteurs.courant();
+        const conserve = this.stockage.lire();
         return conserve ? { ...conserve, mode: 'invite' } : null;
     }
 
@@ -180,7 +183,7 @@ export class Auth {
      */
     oublier() {
         this.joueurCourant = null;
-        this.api.visiteurs.oublier();
+        this.stockage.effacer();
         this.notifier(null);
     }
 
@@ -196,7 +199,7 @@ export class Auth {
             return null;
         }
         try {
-            this.joueurCourant = { ...(await this.api.visiteurs.entretenir(joueur, { memoriser: this.memoriser })), mode: joueur.mode };
+            this.joueurCourant = { ...(await this.modeInvite.entretenir(joueur, { memoriser: this.memoriser })), mode: joueur.mode };
         } catch (error) {
             this.api.config.log('Prolongation de la session impossible', error);
         }

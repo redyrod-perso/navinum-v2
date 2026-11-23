@@ -467,3 +467,55 @@ test('ctx.demanderMedaille : POST /medailles, refus décrits par le module d’e
     await assert.rejects(() => ctx.demanderMedaille(''), NavinumAPI.ValidationError);
     assert.equal(NavinumAPI.erreurs.decrire(NavinumAPI.erreurs.creer('SCORE_REFUSE')).titre, 'Score refusé');
 });
+
+// --- Module gamification -----------------------------------------------------------------------
+
+test('gamification : événements → gains notifiés et cumulés ; mode autonome sans effet', async () => {
+    const token = 'e'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } },
+        [`POST /api/launch/${token}/events`]: (call) => ({ status: 202, body: { accepted: true, gamification: call.body.type === 'quiz.completed'
+            ? { xp: [{ typologie: 'Joueur', points: 80 }, { typologie: 'Général', points: 20 }], medailles: [{ libelle: 'Sans faute' }], totalXp: 300 }
+            : { xp: [], medailles: [], totalXp: 200 } } }),
+        [`POST /api/launch/${token}/medailles`]: { status: 200, body: { medaille: { libelle: 'Explorateur' }, nouvelle: true, totalXp: 300 } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 200, body: {} },
+    });
+    assert.equal(await api.gamification.evenement('quiz.started'), null, 'mode autonome : rien');
+
+    await api.launch(token);
+    const notifies = [];
+    api.gamification.onGains((g) => notifies.push(g.medailles.map((m) => m.libelle).join(',') || g.xp.length));
+
+    assert.deepEqual((await api.gamification.evenement('quiz.started', {})).xp, []);
+    const gains = await api.gamification.evenement('quiz.completed', { score: 8 });
+    assert.equal(gains.totalXp, 300);
+    await api.gamification.demanderMedaille('Explorateur');
+    assert.deepEqual(notifies, ['Sans faute', 'Explorateur'], 'événement sans gain : pas de notification');
+    assert.deepEqual(api.gamification.bilan(), { xp: 100, medailles: [{ libelle: 'Sans faute' }, { libelle: 'Explorateur' }], totalXp: 300 });
+
+    // Jamais bloquant : une erreur réseau rend null
+    fetch.calls.length = 0;
+    global.fetch = fakeFetch({ [`POST /api/launch/${token}/events`]: { throw: new TypeError('Failed to fetch') } });
+    assert.equal(await api.gamification.evenement('quiz.answered', {}), null);
+});
+
+test('auth : la logique de session est dans le module (api.visiteurs ne garde que des alias)', async () => {
+    const api = makeApi({ 'POST /api/visiteur/invite': (call) => ({ status: 201, body: { visiteur: { id: 'v1', pseudo: call.body.pseudo }, token: 't', expiresAt: new Date(Date.now() + 1800e3).toISOString(), appareil: 'nva1.x' } }) });
+    const joueur = await api.auth.connecter({ pseudo: 'Ana' });
+    assert.equal(api.auth.stockage.lire().appareil, 'nva1.x');
+    assert.equal(api.visiteurs.courant().id, joueur.id, 'alias obsolète toujours fonctionnel');
+    assert.equal(typeof api.visiteurs.entretenir, 'undefined', 'plus de logique de session dans la ressource');
+    api.visiteurs.oublier();
+    assert.equal(api.auth.joueur(), joueur, 'joueur de la page conservé ; seul le stockage est effacé');
+});
+
+test('points d’entrée par module (package.json exports) : chargeables seuls', async () => {
+    const pkg = require(path.join(__dirname, '..', 'package.json'));
+    for (const [nom, cible] of Object.entries(pkg.exports)) {
+        if (nom.includes('*') || nom === './package.json' || typeof cible !== 'string') continue;
+        const mod = await import(path.join(__dirname, '..', cible));
+        assert.ok(mod.default, `${nom} exporte un défaut`);
+    }
+    const { erreurs } = await import(path.join(__dirname, '..', pkg.exports['./erreurs']));
+    assert.equal(erreurs.decrire(new TypeError('Failed to fetch')).code, 'RESEAU');
+});

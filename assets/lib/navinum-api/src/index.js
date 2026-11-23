@@ -19,8 +19,9 @@ import { RfidAPI } from './resources/RfidAPI.js';
 import { RfidGroupeAPI } from './resources/RfidGroupeAPI.js';
 import { LogVisiteAPI } from './resources/LogVisiteAPI.js';
 import { LaunchAPI, LAUNCH_TOKEN_PARAM } from './resources/LaunchAPI.js';
-import { Erreurs, erreurs, CODES, ACTIONS } from './modules/Erreurs.js';
-import { Auth } from './modules/Auth.js';
+import { Erreurs, erreurs, CODES, ACTIONS } from './modules/erreurs/Erreurs.js';
+import { Auth } from './modules/auth/Auth.js';
+import { Gamification } from './modules/gamification/Gamification.js';
 
 /**
  * Navinum API Client
@@ -70,6 +71,9 @@ export class NavinumAPI {
         this.erreurs = erreurs;
         /** Authentification des joueurs (voir {@link Auth}). */
         this.auth = new Auth(this);
+        this.visiteurs.auth = this.auth; // alias obsolètes api.visiteurs.identifier()/courant()/oublier()
+        /** Gamification : événements, XP et médailles gagnés (voir {@link Gamification}). */
+        this.gamification = new Gamification(this);
         /** Dernier contexte de lancement résolu par {@link NavinumAPI#launch} (null en mode autonome). */
         this.contexte = null;
     }
@@ -187,6 +191,7 @@ NavinumAPI.ServerError = ServerError;
 NavinumAPI.erreurs = erreurs;
 NavinumAPI.Erreurs = Erreurs;
 NavinumAPI.Auth = Auth;
+NavinumAPI.Gamification = Gamification;
 
 // Export des erreurs pour utilisation externe
 export {
@@ -203,7 +208,8 @@ export {
     erreurs,
     CODES,
     ACTIONS,
-    Auth
+    Auth,
+    Gamification
 };
 
 // Export par défaut
