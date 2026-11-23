@@ -657,3 +657,27 @@ test('rfidGroupes.list : toutes les pages sont lues', async () => {
     assert.equal(fetch.calls[1].search, '?nom=Classe&page=2', 'filtre conservé sur les pages suivantes');
     assert.equal((await api.rfidGroupes.findByNom('Classe 4B')).id, 'x');
 });
+
+// Bug : un lien réutilisé par un autre joueur encore actif créditait le joueur précédent.
+test('gains : les événements portent le jeton du joueur ; lancement rattaché à un autre → rien de crédité', async () => {
+    const token = 'f'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: { id: 'autre' }, mercure: null } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 409, body: { error: 'Ce lancement est déjà rattaché à un autre visiteur', code: 'DEJA_RATTACHE' } },
+        [`POST /api/launch/${token}/events`]: (call) => (call.headers.Authorization === 'Bearer nvv2.bob'
+            ? { status: 202, body: { accepted: true, gamification: null, rattache: false } }
+            : { status: 202, body: { accepted: true, gamification: { xp: [{ points: 5 }], medailles: [], totalXp: 5 }, rattache: true } }),
+        'POST /api/visiteur/invite': { status: 201, body: { visiteur: { id: 'bob', pseudo: 'Bob' }, token: 'nvv2.bob', expiresAt: new Date(Date.now() + 1800e3).toISOString(), appareil: 'nva1.bob' } },
+    });
+    await api.launch(token);
+    assert.ok(await api.gamification.evenement('quiz.started', {}), 'sans joueur connecté : comportement inchangé');
+    assert.equal(fetch.calls.at(-1).headers.Authorization, undefined);
+
+    const bob = await api.auth.connecter({ pseudo: 'Bob' });
+    assert.equal(bob.rattache, false);
+    assert.equal(bob.motif, 'DEJA_RATTACHE', 'l’interactif peut prévenir le joueur');
+
+    assert.equal(await api.gamification.evenement('quiz.completed', { score: 3 }), null, 'gains non comptés');
+    assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv2.bob');
+    assert.equal(api.gamification.bilan().xp, 5, 'seuls les gains réels sont cumulés');
+});

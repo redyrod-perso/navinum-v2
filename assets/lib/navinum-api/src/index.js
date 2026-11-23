@@ -124,7 +124,8 @@ export class NavinumAPI {
      * }
      */
     async launch(token) {
-        this.contexte = await this.launches.resolve(token);
+        // Les événements portent le jeton du joueur connecté dans cette page (gains jamais crédités à un autre)
+        this.contexte = await this.launches.resolve(token, { jetonJoueur: () => this.auth.joueurCourant?.token ?? null });
         if (this.contexte) {
             // Chaque événement de la partie compte comme activité du joueur : sa session est prolongée
             const track = this.contexte.track;

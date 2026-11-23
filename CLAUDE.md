@@ -475,7 +475,9 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
   dans `VISITEUR_SECRET_PRECEDENT` (facultative) au moins 30 min.
 - **Borne partagée** : `modeBorne` dans la configuration du placement (quiz : déconnexion en fin de partie, rien de
   conservé sur l'appareil). Un nouveau joueur reprend le lancement si le précédent n'est plus actif, et **toujours** en
-  mode borne (le joueur parti sans se déconnecter ne reçoit pas les gains des suivants).
+  mode borne (le joueur parti sans se déconnecter ne reçoit pas les gains des suivants). Les gains ne vont qu'au
+  joueur qui joue : la librairie joint son jeton (Bearer) aux événements et médailles demandées ; s'il ne désigne pas
+  le visiteur rattaché au lancement, personne n'est crédité (`rattache: false`).
 - `POST /api/launch/{jeton}/visiteur` (Bearer) rattache le visiteur au lancement : ses événements alimentent son `LogVisite`.
 - Côté JS (lib 0.6.0) : **module `api.auth`** — `api.auth.connecter({ pseudo })` (mode invité ; `compte`, `oauth`,
   `rfid` à venir derrière la même API) rattache aussi la partie lancée. En dessous : `api.visiteurs.identifier(pseudo)` (visiteur conservé sur l'appareil, clé `navinum.visiteur`,

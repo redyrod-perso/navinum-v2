@@ -19,6 +19,11 @@ Modules réutilisables, partie 2 (#53).
 - Points d'entrée `@navinum/api/multijoueur` et `@navinum/api/react`.
 
 ### Fixed
+- Un lien de lancement réutilisé par un autre joueur, alors que le précédent était encore actif, créditait le
+  joueur précédent. Les événements et médailles demandées portent désormais le jeton du joueur connecté
+  (`Authorization`) ; le serveur ne crédite que le joueur rattaché (sinon `rattache: false`, personne n'est crédité,
+  `api.gamification.evenement()` rend `null`). `api.auth.connecter()` indique `rattache: false` et
+  `motif: 'DEJA_RATTACHE'` pour que l'interactif prévienne le joueur.
 - `rfidGroupes.list()` ne rendait que les 30 premiers groupes (pagination API Platform) : un groupe récent
   n'apparaissait pas dans les listes, et `findByNom()` / `findOrCreate()` pouvaient le manquer. Toutes les pages
   sont désormais lues.

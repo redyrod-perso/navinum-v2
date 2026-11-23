@@ -407,10 +407,15 @@ function QuizApp() {
         setPlayerName(nom);
         try {
             // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
-            await identifyPlayer(nom, config.modeBorne);
+            const joueur = await identifyPlayer(nom, config.modeBorne);
 
             // Groupe retrouvé ou créé, lobby (le serveur impose le nombre maximum de joueurs du parcours)
             await partie.rejoindre(groupe, nom);
+
+            // Lien de lancement déjà utilisé par un autre joueur encore actif : ses gains ne seront pas comptés
+            if (joueur && joueur.motif === 'DEJA_RATTACHE') {
+                afficherErreur(erreurs.creer('DEJA_RATTACHE', 'Vos XP et médailles ne seront pas comptés : ce lien est déjà utilisé par un autre joueur. Relancez le quiz depuis Navinum pour jouer à votre nom.'));
+            }
         } catch (err) {
             // Partie en cours, groupe complet (imposé par le serveur), réseau… : titre, message, « Réessayer »
             afficherErreur(err, joinGlobalSession);
