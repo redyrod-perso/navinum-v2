@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Entity\LaunchToken;
 use App\Gamification\GamificationService;
 use App\Gamification\MedailleRefusee;
+use App\Gamification\SessionScoreVerifier;
 use App\Repository\LaunchTokenRepository;
 use App\Service\LaunchService;
 use App\Service\VisiteurToken;
@@ -33,6 +34,7 @@ final class LaunchController extends AbstractController
         private readonly LaunchService $launch,
         private readonly VisiteurToken $visiteurTokens,
         private readonly GamificationService $gamification,
+        private readonly SessionScoreVerifier $scores,
     ) {
     }
 
@@ -91,11 +93,19 @@ final class LaunchController extends AbstractController
             return $this->json(['error' => 'Payload trop volumineux (64 Ko max)', 'code' => 'VALIDATION'], 400);
         }
 
-        $log = $this->launch->recordEvent($launchToken, $type, $payload);
+        // Fin de partie multijoueur : score repris de la session contrôlée par le serveur (règle scoreSession)
+        $payload = $this->scores->verifier($launchToken, $type, $payload);
 
-        // Gamification : XP et médailles selon les règles de l'interactif (null sans visiteur identifié),
-        // jamais au profit d'un autre joueur que celui qui joue
+        // Gains et journal de visite : jamais au profit (ni au nom) d'un autre joueur que celui qui joue
         $rattache = $this->joueurRattache($launchToken, $request);
+        $log = $this->launch->recordEvent(
+            $launchToken,
+            $type,
+            $payload,
+            $rattache ? null : ['visiteur' => $this->visiteurTokens->fromRequest($request)],
+        );
+
+        // Gamification : XP et médailles selon les règles de l'interactif (null sans visiteur identifié)
         $gamification = $this->gamification->apply(
             $launchToken->getInteractif(),
             $rattache ? $launchToken->getVisiteur() : null,

@@ -16,7 +16,8 @@ use Symfony\Component\ExpressionLanguage\SyntaxError;
  *   "medailles": [
  *     { "medaille": "Sans faute", "evenement": "quiz.completed", "si": "score == total" }
  *   ],
- *   "attribuables": ["Explorateur"]
+ *   "attribuables": ["Explorateur"],
+ *   "scoreSession": ["quiz.completed"]
  * }
  *
  * - `evenement` : type exact (`quiz.completed`) ou préfixe suivi de `*` (`quiz.*`).
@@ -26,6 +27,8 @@ use Symfony\Component\ExpressionLanguage\SyntaxError;
  * - `medaille` : libellé d'une médaille existante (créée dans l'admin ou par le manifeste).
  * - `attribuables` : médailles que l'interactif peut demander lui-même (`POST /api/launch/{jeton}/medailles`) ;
  *   aucune par défaut (anti-triche : une médaille absente de cette liste est refusée).
+ * - `scoreSession` : événements de fin de partie multijoueur dont `score`, `total` et `victoire` sont repris de
+ *   la session de jeu contrôlée par le serveur (et non de ce que déclare le navigateur) ; voir SessionScoreVerifier.
  *
  * Ce schéma sert à la fois au formulaire généré de l'admin et à la validation côté serveur.
  */
@@ -75,6 +78,13 @@ final class RulesSchema
                     'title' => "Médailles attribuables par l'interactif",
                     'description' => "Médailles que l'interactif peut demander lui-même via l'API (aucune par défaut).",
                     'items' => ['type' => 'string', 'title' => 'Médaille', 'minLength' => 1],
+                    'default' => [],
+                ],
+                'scoreSession' => [
+                    'type' => 'array',
+                    'title' => 'Scores contrôlés par le serveur',
+                    'description' => 'Événements de fin de partie multijoueur dont le score est repris de la session de jeu (anti-triche), ex. quiz.completed.',
+                    'items' => ['type' => 'string', 'title' => 'Événement', 'minLength' => 1],
                     'default' => [],
                 ],
             ],

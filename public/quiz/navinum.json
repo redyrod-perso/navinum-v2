@@ -487,6 +487,9 @@
           "evenement": "quiz.completed",
           "si": "victoire and joueurs > 1"
         }
+      ],
+      "scoreSession": [
+        "quiz.completed"
       ]
     },
     "medailles": [
