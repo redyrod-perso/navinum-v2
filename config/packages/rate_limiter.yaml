@@ -1,0 +1,21 @@
+# Limites anti-abus de l'API publique des visiteurs (comptes en ligne, #4).
+framework:
+    rate_limiter:
+        # Tentatives de connexion par adresse e-mail et par IP : contre la recherche de mot de passe
+        connexion_visiteur:
+            policy: sliding_window
+            limit: 10
+            interval: '15 minutes'
+        # Créations de compte par IP
+        inscription_visiteur:
+            policy: sliding_window
+            limit: 20
+            interval: '1 hour'
+
+when@test:
+    framework:
+        rate_limiter:
+            inscription_visiteur:
+                policy: sliding_window
+                limit: 100000
+                interval: '1 hour'

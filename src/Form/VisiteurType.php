@@ -10,6 +10,7 @@ use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\CheckboxType;
 use Symfony\Component\Form\Extension\Core\Type\DateType;
 use Symfony\Component\Form\Extension\Core\Type\EmailType;
+use Symfony\Component\Form\Extension\Core\Type\PasswordType;
 use Symfony\Component\Form\Extension\Core\Type\TextType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
@@ -31,9 +32,13 @@ class VisiteurType extends AbstractType
                 'label' => 'Pseudo',
                 'required' => false,
             ])
-            ->add('password_son', TextType::class, [
-                'label' => 'Password son',
+            // Jamais le mot de passe (haché) : seulement un nouveau, défini par l'admin (« mot de passe oublié »)
+            ->add('nouveauMotDePasse', PasswordType::class, [
+                'label' => 'Nouveau mot de passe (compte en ligne)',
+                'mapped' => false,
                 'required' => false,
+                'help' => 'Laisser vide pour ne pas le changer. 8 caractères au moins.',
+                'attr' => ['autocomplete' => 'new-password'],
             ])
             ->add('date_naissance', DateType::class, [
                 'label' => 'Date de naissance',

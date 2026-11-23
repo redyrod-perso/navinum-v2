@@ -731,7 +731,8 @@ api.auth.modes();           // ['invite']
 | Mode | État |
 |------|------|
 | `invite` | Disponible : visiteur invité à partir d'un pseudo, réutilisé sur l'appareil |
-| `compte`, `oauth`, `rfid` | À venir : erreur `MODE_INDISPONIBLE` en attendant |
+| `compte` | Disponible : adresse e-mail + mot de passe (voir ci-dessous) |
+| `oauth`, `rfid` | À venir : erreur `MODE_INDISPONIBLE` en attendant |
 | personnalisé | `api.auth.ajouterMode(nom, async (options, api) => ({ id, pseudo, anonyme, token }))` |
 
 **Session (lib 0.8.0) :** le jeton expire après **30 minutes d'inactivité** et au plus **12 heures** après
@@ -753,6 +754,21 @@ Le rattachement de la partie n'est jamais bloquant : en cas d'échec, `joueur.ra
 connecté. Le stockage se règle avec l'option `storage` (`localStorage` par défaut, `null` pour ne rien conserver).
 
 ---
+
+### Comptes en ligne (e-mail + mot de passe)
+
+```javascript
+// Un invité connecté qui crée un compte le **devient** : mêmes XP, médailles et historique
+const joueur = await api.auth.creerCompte({ email, motDePasse, newsletter: caseCochee }); // newsletter : jamais par défaut
+await api.auth.connecter({ mode: 'compte', email, motDePasse });   // sur un autre appareil
+await api.auth.connecter({ mode: 'compte' });                      // plus tard, sans mot de passe : session reprise sur l'appareil
+```
+
+Erreurs (module d'erreurs) : `IDENTIFIANTS_INVALIDES` (message identique que l'adresse existe ou non),
+`EMAIL_DEJA_UTILISE`, `TROP_DE_TENTATIVES` (10 échecs en 15 min par adresse), `VALIDATION` (mot de passe de moins de
+8 caractères, adresse invalide). L'adresse n'apparaît jamais dans le profil public. Vérification d'adresse et
+« mot de passe oublié » par e-mail : quand l'envoi d'e-mails sera branché ; en attendant, l'admin définit un nouveau mot
+de passe (Admin › Visiteurs).
 
 ### Intégrer l'authentification dans un nouvel interactif
 

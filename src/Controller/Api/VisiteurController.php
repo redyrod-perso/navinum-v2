@@ -3,12 +3,16 @@
 namespace App\Controller\Api;
 
 use App\Entity\Visiteur;
+use App\Service\CompteRefuse;
+use App\Service\CompteVisiteur;
 use App\Service\VisiteurToken;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\Routing\Attribute\Route;
 
 /**
@@ -20,8 +24,12 @@ use Symfony\Component\Routing\Attribute\Route;
  * - POST /api/visiteur/renouveler  (Bearer)            → jeton prolongé de 30 min (12 h au plus)
  * - GET  /api/visiteur/moi         (Bearer)            → profil
  * - POST /api/visiteur/deconnexion (Bearer)            → révoque cet appareil
+ * - POST /api/visiteur/inscription {email, motDePasse, pseudo?, newsletter?} (Bearer d'un invité facultatif : il
+ *                                  devient un compte, mêmes XP et médailles) → profil + jeton (+ appareil)
+ * - POST /api/visiteur/connexion   {email, motDePasse}  → profil + jeton + appareil
  *
- * Refus : 401 `NON_IDENTIFIE` (jeton expiré, révoqué ou invalide ; secret d'appareil ou pseudo incorrect).
+ * Refus : 401 `NON_IDENTIFIE` (jeton expiré, révoqué ou invalide ; secret d'appareil ou pseudo incorrect),
+ * 401 `IDENTIFIANTS_INVALIDES`, 409 `EMAIL_DEJA_UTILISE`, 429 `TROP_DE_TENTATIVES`, 400 `VALIDATION`.
  * Le jeton s'utilise avec POST /api/launch/{jeton}/visiteur pour relier une partie au visiteur.
  */
 #[Route('/api/visiteur', name: 'api_visiteur_')]
@@ -30,7 +38,78 @@ final class VisiteurController extends AbstractController
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly VisiteurToken $tokens,
+        private readonly CompteVisiteur $comptes,
+        #[Autowire(service: 'limiter.connexion_visiteur')] private readonly RateLimiterFactory $connexionLimiter,
+        #[Autowire(service: 'limiter.inscription_visiteur')] private readonly RateLimiterFactory $inscriptionLimiter,
     ) {
+    }
+
+    #[Route('/inscription', name: 'inscription', methods: ['POST'])]
+    public function inscription(Request $request): JsonResponse
+    {
+        if (!$this->inscriptionLimiter->create((string) $request->getClientIp())->consume()->isAccepted()) {
+            return self::tropDeTentatives();
+        }
+        $data = json_decode($request->getContent(), true);
+        $data = \is_array($data) ? $data : [];
+
+        // Invité de cet appareil (Bearer) : il devient un compte et garde son identité
+        $session = $this->tokens->session(VisiteurToken::bearer($request));
+        $invite = null !== $session ? $session['appareil']->getVisiteur() : null;
+        try {
+            $visiteur = $this->comptes->inscrire(
+                (string) ($data['email'] ?? ''),
+                (string) ($data['motDePasse'] ?? ''),
+                isset($data['pseudo']) ? (string) $data['pseudo'] : null,
+                true === ($data['newsletter'] ?? false),
+                $invite,
+            );
+        } catch (CompteRefuse $e) {
+            return new JsonResponse(['error' => $e->getMessage(), 'code' => $e->codeMetier], 'EMAIL_DEJA_UTILISE' === $e->codeMetier ? 409 : 400);
+        }
+
+        if (null !== $session && $session['appareil']->getVisiteur() === $visiteur) {
+            // Même appareil, même visiteur : nouvelle session, le client garde son secret d'appareil
+            $reponse = $this->tokens->issue($session['appareil']);
+        } else {
+            [$appareil, $secret] = $this->tokens->creerAppareil($visiteur);
+            $this->em->flush();
+            $reponse = $this->tokens->issue($appareil) + ['appareil' => $secret];
+        }
+        $this->em->flush();
+
+        return $this->json(['visiteur' => self::profile($visiteur), ...$reponse], 201);
+    }
+
+    #[Route('/connexion', name: 'connexion', methods: ['POST'])]
+    public function connexion(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $email = \is_array($data) ? mb_strtolower(trim((string) ($data['email'] ?? ''))) : '';
+        $limite = $this->connexionLimiter->create($request->getClientIp().'|'.$email);
+        if (0 === $limite->consume(0)->getRemainingTokens()) {
+            return self::tropDeTentatives();
+        }
+
+        $visiteur = $this->comptes->authentifier($email, \is_array($data) ? (string) ($data['motDePasse'] ?? '') : '');
+        if (null === $visiteur) {
+            $limite->consume(); // seuls les échecs comptent
+            // Message générique : ne révèle pas si l'adresse a un compte
+            return new JsonResponse(['error' => 'Adresse e-mail ou mot de passe incorrect.', 'code' => 'IDENTIFIANTS_INVALIDES'], 401);
+        }
+        $limite->reset();
+
+        [$appareil, $secret] = $this->tokens->creerAppareil($visiteur);
+        $this->em->flush();
+        $reponse = $this->tokens->issue($appareil);
+        $this->em->flush();
+
+        return $this->json(['visiteur' => self::profile($visiteur), ...$reponse, 'appareil' => $secret]);
+    }
+
+    private static function tropDeTentatives(): JsonResponse
+    {
+        return new JsonResponse(['error' => 'Trop de tentatives : réessayez dans quelques minutes.', 'code' => 'TROP_DE_TENTATIVES'], 429);
     }
 
     #[Route('/invite', name: 'invite', methods: ['POST'])]

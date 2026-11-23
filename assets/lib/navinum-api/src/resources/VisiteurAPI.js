@@ -105,6 +105,31 @@ export class VisiteurAPI extends BaseResource {
     }
 
     /**
+     * Crée un compte (e-mail + mot de passe). Avec le jeton d'un **invité**, c'est lui qui devient un compte
+     * (mêmes XP et médailles) ; la réponse n'inclut alors pas de nouveau secret d'appareil.
+     *
+     * @param {{email: string, motDePasse: string, pseudo?: string, newsletter?: boolean}} data
+     * @param {string} [jetonInvite] - Jeton visiteur de l'invité à transformer
+     * @returns {Promise<{visiteur: VisiteurProfil, token: string, expiresAt: string, appareil?: string}>}
+     * @throws {ValidationError} code `VALIDATION` ; {NavinumAPIError} `EMAIL_DEJA_UTILISE` (409), `TROP_DE_TENTATIVES` (429)
+     */
+    async inscription(data, jetonInvite) {
+        return this.client.post('/api/visiteur/inscription', data,
+            jetonInvite ? { headers: { Authorization: `Bearer ${jetonInvite}` } } : {});
+    }
+
+    /**
+     * Connexion à un compte (e-mail + mot de passe) : nouvel appareil, jeton de 30 min.
+     *
+     * @param {{email: string, motDePasse: string}} data
+     * @returns {Promise<{visiteur: VisiteurProfil, token: string, expiresAt: string, appareil: string}>}
+     * @throws {UnauthorizedError} code `IDENTIFIANTS_INVALIDES` ; {NavinumAPIError} `TROP_DE_TENTATIVES` (429)
+     */
+    async connexion(data) {
+        return this.client.post('/api/visiteur/connexion', data);
+    }
+
+    /**
      * @deprecated Depuis 0.9.0 : utiliser `api.auth.connecter({ pseudo, memoriser })` (module d'authentification).
      * @param {string} pseudo
      * @param {Object} [options={}]

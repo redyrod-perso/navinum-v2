@@ -12,6 +12,7 @@ use App\Repository\VisiteurRepository;
 use Doctrine\Common\Collections\ArrayCollection;
 use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping as ORM;
+use Symfony\Bridge\Doctrine\Validator\Constraints\UniqueEntity;
 
 #[ORM\Entity(repositoryClass: VisiteurRepository::class)]
 #[ORM\HasLifecycleCallbacks]
@@ -26,7 +27,8 @@ use Doctrine\ORM\Mapping as ORM;
     ],
 )]
 #[ORM\Table(name: 'visiteur')]
-#[ORM\Index(name: 'idx_visiteur_email', columns: ['email'])]
+#[ORM\UniqueConstraint(name: 'uniq_visiteur_email', columns: ['email'])]
+#[UniqueEntity(fields: ['email'], message: 'Un visiteur utilise déjà cette adresse e-mail.')]
 #[ORM\Index(name: 'idx_visiteur_password_son', columns: ['password_son'])]
 #[ORM\Index(name: 'idx_visiteur_pseudo_son', columns: ['pseudo_son'])]
 class Visiteur
@@ -43,6 +45,10 @@ class Visiteur
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $email = null;
+
+    /** Adresse vérifiée (lien envoyé par e-mail) ; null tant que l'envoi d'e-mails n'est pas branché. */
+    #[ORM\Column(type: 'datetime_immutable', nullable: true)]
+    private ?\DateTimeImmutable $emailVerifieAt = null;
 
     #[ORM\ManyToOne(targetEntity: Contexte::class)]
     #[ORM\JoinColumn(name: 'contexte_creation_id', referencedColumnName: 'id', nullable: true, onDelete: 'SET NULL')]
@@ -129,7 +135,10 @@ class Visiteur
     public function setPasswordSon(?string $p): self { $this->password_son = $p; return $this; }
 
     public function getEmail(): ?string { return $this->email; }
-    public function setEmail(?string $e): self { $this->email = $e; return $this; }
+    /** Adresse enregistrée en minuscules (unicité insensible à la casse). */
+    public function setEmail(?string $e): self { $this->email = null === $e ? null : mb_strtolower(trim($e)); return $this; }
+    public function getEmailVerifieAt(): ?\DateTimeImmutable { return $this->emailVerifieAt; }
+    public function setEmailVerifieAt(?\DateTimeImmutable $d): self { $this->emailVerifieAt = $d; return $this; }
 
     public function getContexteCreation(): ?Contexte { return $this->contexteCreation; }
     public function setContexteCreation(?Contexte $c): self { $this->contexteCreation = $c; return $this; }

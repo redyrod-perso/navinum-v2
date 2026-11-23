@@ -409,7 +409,7 @@ test('auth.connecter (invité) : jeton visiteur, rattachement au lancement, onCh
         [`POST /api/launch/${token}/visiteur`]: { status: 200, body: { visiteur: { id: 'v1', pseudo: 'Léa', anonyme: true } } },
         'POST /api/visiteur/invite': (call) => ({ status: 201, body: { visiteur: { id: 'v1', pseudo: call.body.pseudo, anonyme: true }, token: 'nvv1.v1.sig' } }),
     });
-    assert.deepEqual(api.auth.modes(), ['invite']);
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte']);
     const ctx = await api.launch(token);
     const changements = [];
     api.auth.onChange((j) => changements.push(j && j.pseudo));
@@ -713,7 +713,7 @@ test('auth : un mode branché fournit connecter, entretenir et deconnecter (cont
         entretenir: async (joueur, { memoriser }) => { appels.push(`entretenir:${memoriser}`); return { ...joueur, token: 'nvv2.badge2' }; },
         deconnecter: async (joueur) => { appels.push(`deconnecter:${joueur.token}`); },
     });
-    assert.deepEqual(api.auth.modes(), ['invite', 'rfid']);
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte', 'rfid']);
 
     const ctx = await api.launch(token);
     const joueur = await api.auth.connecter({ mode: 'rfid', badge: '042' });
@@ -742,4 +742,44 @@ test('erreurs : le message d’une erreur levée par la librairie elle-même est
     assert.equal(info.code, 'VALIDATION');
     assert.equal(info.message, 'Le pseudo doit faire entre 2 et 40 caractères');
     assert.match(NavinumAPI.erreurs.decrire(new NavinumAPI.NetworkError('Timeout après 5000ms')).message, /ne répond pas/, 'réseau : message du catalogue');
+});
+
+// --- #4 : comptes (e-mail + mot de passe) ---------------------------------------------------------
+
+test('auth : créer un compte depuis un invité (même visiteur), se connecter, reprendre la session du compte', async () => {
+    const dans30 = () => new Date(Date.now() + 1800e3).toISOString();
+    const api = makeApi({
+        'POST /api/visiteur/invite': { status: 201, body: { visiteur: { id: 'v1', pseudo: 'Tom', anonyme: true }, token: 'nvv2.invite', expiresAt: dans30(), appareil: 'nva1.tom' } },
+        'POST /api/visiteur/inscription': (call) => ({ status: 201, body: { visiteur: { id: call.headers.Authorization ? 'v1' : 'v9', pseudo: 'Tom', anonyme: false }, token: 'nvv2.compte', expiresAt: dans30() } }),
+        'POST /api/visiteur/connexion': (call) => (call.body.motDePasse === 'secret-123'
+            ? { status: 200, body: { visiteur: { id: 'v1', pseudo: 'Tom', anonyme: false }, token: 'nvv2.connexion', expiresAt: dans30(), appareil: 'nva1.autre' } }
+            : { status: 401, body: { error: 'Adresse e-mail ou mot de passe incorrect.', code: 'IDENTIFIANTS_INVALIDES' } }),
+        'POST /api/visiteur/reprendre': (call) => ({ status: 200, body: { visiteur: { id: 'v1', pseudo: call.body.pseudo, anonyme: false }, token: 'nvv2.repris', expiresAt: dans30() } }),
+    });
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte']);
+
+    await api.auth.connecter({ pseudo: 'Tom' });
+    const compte = await api.auth.creerCompte({ email: 'tom@exemple.test', motDePasse: 'secret-123', newsletter: true });
+    const inscription = fetch.calls.find((c) => c.path === '/api/visiteur/inscription');
+    assert.equal(inscription.headers.Authorization, 'Bearer nvv2.invite', 'l’invité est transmis : il devient le compte');
+    assert.deepEqual(inscription.body, { email: 'tom@exemple.test', motDePasse: 'secret-123', newsletter: true });
+    assert.equal(compte.id, 'v1');
+    assert.equal(compte.mode, 'compte');
+    assert.equal(compte.appareil, 'nva1.tom', 'même appareil conservé');
+
+    const refus = await api.auth.connecter({ mode: 'compte', email: 'tom@exemple.test', motDePasse: 'faux' }).catch((e) => e);
+    assert.equal(NavinumAPI.erreurs.decrire(refus).code, 'IDENTIFIANTS_INVALIDES');
+    assert.equal((await api.auth.connecter({ mode: 'compte', email: 'tom@exemple.test', motDePasse: 'secret-123' })).token, 'nvv2.connexion');
+
+    // Plus tard, sans mot de passe : session du compte reprise sur l'appareil
+    api.client.config.storage.setItem('navinum.visiteur', JSON.stringify({ ...api.auth.joueur(), expiresAt: new Date(Date.now() - 60e3).toISOString() }));
+    api.auth.joueurCourant = null;
+    const repris = await api.auth.connecter({ mode: 'compte' });
+    assert.equal(repris.token, 'nvv2.repris');
+    assert.equal(api.auth.joueur().mode, 'compte');
+
+    api.auth.oublier();
+    const sansCompte = await api.auth.connecter({ mode: 'compte' }).catch((e) => e);
+    assert.equal(NavinumAPI.erreurs.decrire(sansCompte).code, 'NON_IDENTIFIE');
+    assert.equal(NavinumAPI.erreurs.decrire(new NavinumAPI.NavinumAPIError('x', 429)).code, 'TROP_DE_TENTATIVES');
 });

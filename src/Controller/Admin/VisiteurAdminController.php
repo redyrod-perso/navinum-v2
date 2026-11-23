@@ -4,7 +4,11 @@ namespace App\Controller\Admin;
 
 use App\Entity\Visiteur;
 use App\Form\VisiteurType;
+use App\Service\CompteRefuse;
+use App\Service\CompteVisiteur;
 use App\Service\VisiteurToken;
+use Symfony\Component\Form\FormError;
+use Symfony\Component\Form\FormInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,9 +19,32 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 #[IsGranted('ROLE_ADMIN')]
 final class VisiteurAdminController extends AbstractCrudController
 {
-    public function __construct(EntityManagerInterface $em, private readonly VisiteurToken $tokens)
-    {
+    public function __construct(
+        EntityManagerInterface $em,
+        private readonly VisiteurToken $tokens,
+        private readonly CompteVisiteur $comptes,
+    ) {
         parent::__construct($em);
+    }
+
+    /** Nouveau mot de passe saisi par l'admin : haché (jamais stocké ni affiché en clair). */
+    protected function beforeSave(object $entity, FormInterface $form, bool $isNew): bool
+    {
+        $motDePasse = (string) $form->get('nouveauMotDePasse')->getData();
+        if ('' === $motDePasse) {
+            return true;
+        }
+        try {
+            /** @var Visiteur $entity */
+            $this->comptes->changerMotDePasse($entity, $motDePasse);
+        } catch (CompteRefuse $e) {
+            $form->get('nouveauMotDePasse')->addError(new FormError($e->getMessage()));
+
+            return false;
+        }
+        $this->addFlash('success', 'Mot de passe du compte modifié.');
+
+        return true;
     }
 
     protected function config(): array

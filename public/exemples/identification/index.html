@@ -34,6 +34,20 @@
         <p><button id="connecter">Se connecter</button></p>
     </fieldset>
 
+    <fieldset id="formulaire-compte">
+        <legend>Compte en ligne (e-mail + mot de passe)</legend>
+        <label for="email">Adresse e-mail</label>
+        <input type="text" id="email" autocomplete="email">
+        <label for="mot-de-passe">Mot de passe (8 caractères au moins)</label>
+        <input type="password" id="mot-de-passe" autocomplete="current-password" style="padding: 8px; width: 100%; box-sizing: border-box; margin: 6px 0 10px;">
+        <label><input type="checkbox" id="newsletter"> J'accepte de recevoir la newsletter du musée</label>
+        <p>
+            <button id="connecter-compte">Se connecter</button>
+            <button id="creer-compte">Créer un compte</button>
+        </p>
+        <p class="discret">Connecté en invité ? « Créer un compte » garde vos XP et médailles.</p>
+    </fieldset>
+
     <div class="joueur" id="joueur" hidden>
         <p><strong id="nom"></strong> <span class="discret" id="details"></span></p>
         <p id="rattachement" class="discret"></p>
@@ -61,6 +75,8 @@
         // Affichage selon le joueur connecté (appelé à chaque connexion / déconnexion)
         function afficherJoueur(joueur) {
             $('formulaire').hidden = Boolean(joueur);
+            // Formulaire de compte : avant connexion, ou pour transformer un invité en compte
+            $('formulaire-compte').hidden = Boolean(joueur) && joueur.mode === 'compte';
             $('joueur').hidden = !joueur;
             if (!joueur) return;
             $('nom').textContent = joueur.pseudo;
@@ -83,6 +99,18 @@
             } catch (err) {
                 afficherErreur(err);
             }
+        });
+        const compte = () => ({ email: $('email').value, motDePasse: $('mot-de-passe').value });
+        $('connecter-compte').addEventListener('click', async () => {
+            $('erreur').hidden = true;
+            try { await api.auth.connecter({ mode: 'compte', ...compte() }); } catch (err) { afficherErreur(err); }
+        });
+        $('creer-compte').addEventListener('click', async () => {
+            $('erreur').hidden = true;
+            try {
+                // Consentement explicite : la case n'est jamais cochée par défaut
+                await api.auth.creerCompte({ ...compte(), newsletter: $('newsletter').checked });
+            } catch (err) { afficherErreur(err); }
         });
         $('pas-moi').addEventListener('click', () => { api.auth.oublier(); $('pseudo').value = ''; });
         $('deconnecter').addEventListener('click', () => api.auth.deconnecter());
