@@ -57,6 +57,7 @@ export const CODES = Object.freeze({
     EMAIL_DEJA_UTILISE: { titre: 'Adresse déjà utilisée', message: 'Un compte existe déjà avec cette adresse : connectez-vous.', reessayable: false, action: ACTIONS.SE_RECONNECTER },
     IDENTIFIANTS_INVALIDES: { titre: 'Connexion impossible', message: 'Adresse e-mail ou mot de passe incorrect.', reessayable: false, action: ACTIONS.CORRIGER },
     TROP_DE_TENTATIVES: { titre: 'Trop de tentatives', message: 'Trop de tentatives : réessayez dans quelques minutes.', reessayable: true, action: ACTIONS.ATTENDRE },
+    CONNEXION_ANNULEE: { titre: 'Connexion annulée', message: 'La connexion a été annulée.', reessayable: true, action: ACTIONS.REESSAYER },
     MODE_INDISPONIBLE: { titre: 'Connexion indisponible', message: 'Ce mode de connexion n’est pas encore disponible.', reessayable: false, action: ACTIONS.AUCUNE },
     INCONNU: { titre: 'Erreur inattendue', message: 'Une erreur inattendue est survenue.', reessayable: true, action: ACTIONS.REESSAYER }
 });

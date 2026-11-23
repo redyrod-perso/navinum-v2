@@ -130,6 +130,36 @@ export class VisiteurAPI extends BaseResource {
     }
 
     /**
+     * Fournisseurs OAuth actifs sur ce Navinum (Google, Microsoft, Facebook… selon la configuration du serveur).
+     * @returns {Promise<Array<{nom: string, libelle: string}>>}
+     */
+    async fournisseursOAuth() {
+        const res = await this.client.get('/api/visiteur/oauth/fournisseurs');
+        return (res && res.fournisseurs) || [];
+    }
+
+    /**
+     * Démarre une connexion OAuth : rend l'adresse du fournisseur où envoyer le joueur.
+     * @param {string} nom - Fournisseur (`google`, `microsoft`, `facebook`…)
+     * @param {{retour: string, memoriser?: boolean}} data - Page de retour (même site)
+     * @param {string} [jetonConnecte] - Joueur connecté : le fournisseur lui sera lié
+     * @returns {Promise<{url: string}>}
+     */
+    async demarrerOAuth(nom, data, jetonConnecte) {
+        return this.client.post(`/api/visiteur/oauth/${encodeURIComponent(nom)}/demarrer`, data,
+            jetonConnecte ? { headers: { Authorization: `Bearer ${jetonConnecte}` } } : {});
+    }
+
+    /**
+     * Échange le code à usage unique reçu au retour du fournisseur contre la session du joueur.
+     * @param {string} code
+     * @returns {Promise<{visiteur: VisiteurProfil, token: string, expiresAt: string, appareil: string, fournisseur: string, memoriser: boolean}>}
+     */
+    async echangeOAuth(code) {
+        return this.client.post('/api/visiteur/oauth/echange', { code });
+    }
+
+    /**
      * @deprecated Depuis 0.9.0 : utiliser `api.auth.connecter({ pseudo, memoriser })` (module d'authentification).
      * @param {string} pseudo
      * @param {Object} [options={}]

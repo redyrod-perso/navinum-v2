@@ -3,6 +3,7 @@ import { erreurs } from '../erreurs/Erreurs.js';
 import { ModeInvite } from './ModeInvite.js';
 import { Stockage } from './Stockage.js';
 import { ModeCompte } from './ModeCompte.js';
+import { ModeOAuth } from './ModeOAuth.js';
 
 /**
  * Joueur connecté : profil public et jeton visiteur.
@@ -29,7 +30,7 @@ import { ModeCompte } from './ModeCompte.js';
  */
 
 /** Modes prévus par la feuille de route, pas encore branchés côté serveur. */
-const MODES_A_VENIR = ['oauth', 'rfid'];
+const MODES_A_VENIR = ['rfid'];
 
 /**
  * Module d'authentification des joueurs, partagé par tous les interactifs.
@@ -47,7 +48,9 @@ const MODES_A_VENIR = ['oauth', 'rfid'];
  * Modes :
  * - `invite` (disponible) : visiteur invité à partir d'un pseudo, conservé sur l'appareil ;
  * - `compte` (disponible) : adresse e-mail + mot de passe ; `creerCompte()` transforme un invité en compte ;
- * - `oauth`, `rfid` (à venir) : lèvent une erreur `MODE_INDISPONIBLE` en attendant ;
+ * - `oauth` (disponible) : Google, Microsoft, Facebook… selon le serveur (`fournisseursOAuth()`) ; la page est
+ *   quittée puis `retourConnexion()` termine la connexion au retour ;
+ * - `rfid` (à venir) : lève une erreur `MODE_INDISPONIBLE` en attendant ;
  * - modes personnalisés : {@link Auth#ajouterMode}.
  *
  * @class
@@ -80,6 +83,12 @@ export class Auth {
             connecter: (options) => this.modeCompte.connecter(options),
             // Même renouvellement que l'invité ; le joueur conservé garde son mode `compte`
             entretenir: (joueur, { memoriser }) => this.modeInvite.entretenir({ ...joueur, mode: 'compte' }, { memoriser }),
+        });
+        /** Mode « oauth » (Google, Microsoft, Facebook…). */
+        this.modeOAuth = new ModeOAuth(api.visiteurs, this.stockage);
+        this.ajouterMode('oauth', {
+            connecter: (options) => this.modeOAuth.connecter(options, this.joueurCourant),
+            entretenir: (joueur, { memoriser }) => this.modeInvite.entretenir({ ...joueur, mode: 'oauth' }, { memoriser }),
         });
     }
 
@@ -151,6 +160,38 @@ export class Auth {
             throw new ValidationError('Le mode de connexion n’a pas fourni de jeton visiteur', { token: 'requis' });
         }
         return this.ouvrir(joueur, options);
+    }
+
+    /**
+     * Fournisseurs OAuth activés sur ce Navinum, pour n'afficher que les boutons utiles.
+     * @returns {Promise<Array<{nom: string, libelle: string}>>}
+     *
+     * @example
+     * for (const f of await api.auth.fournisseursOAuth()) ajouterBouton(`Continuer avec ${f.libelle}`,
+     *     () => api.auth.connecter({ mode: 'oauth', fournisseur: f.nom }));
+     */
+    async fournisseursOAuth() {
+        return this.api.visiteurs.fournisseursOAuth();
+    }
+
+    /**
+     * À appeler au chargement de la page (après `api.launch()`) : termine une connexion OAuth au retour du
+     * fournisseur et rattache la partie lancée. Rend null s'il n'y a pas de connexion en cours.
+     *
+     * @returns {Promise<Joueur|null>}
+     * @throws {NavinumAPIError} `CONNEXION_ANNULEE` (refus chez le fournisseur), `NON_IDENTIFIE` (code expiré)
+     *
+     * @example
+     * await api.launch();
+     * const joueur = await api.auth.retourConnexion(); // null : pas de retour de connexion
+     */
+    async retourConnexion() {
+        const resultat = await this.modeOAuth.terminer();
+        if (!resultat) {
+            return null;
+        }
+        this.memoriser = resultat.memoriser;
+        return this.ouvrir(resultat.joueur, {});
     }
 
     /**
