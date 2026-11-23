@@ -421,9 +421,13 @@ l'action conseillée. Côté Symfony, toute réponse d'erreur d'API destinée au
 - `POST /api/session/{id}/join` - Rejoindre
 - `POST /api/session/{id}/start` - Démarrer
 - `GET /api/session/{id}` - État session (lecture initiale)
-- `POST /api/session/{id}/score` - Mettre à jour score
+- `POST /api/session/{id}/score` - Mettre à jour score (refusé si non plausible : hors partie, +1 au plus par appel → `SCORE_REFUSE`)
 - `POST /api/session/{id}/leave` - Quitter (aussi à la fermeture de la page : `api.sessions.quitterEnPartant()`)
 - `POST /api/session/{id}/reset`, `POST /api/sessions/clear` - maintenance, **réservées à `ROLE_ADMIN`**
+
+Nombre maximum de joueurs **imposé par le serveur** : `create`/`join` reçoivent `launchToken` (jeton `?nv=`), la
+session garde `maxPlayers` = `joueursMax` de la configuration du lancement (8 sans jeton, 50 au plus) ; au-delà, 409
+`GROUPE_COMPLET`.
 
 Les sessions sont des fichiers de `var/cache/sessions/` nommés par un hachage du nom du groupe (tout nom saisi reste
 un simple fichier de ce dossier, 100 caractères max).
@@ -561,7 +565,8 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
   `App\Gamification\RulesSchema`, validation serveur de la structure et de la syntaxe des expressions) :
   ```json
   { "xp": [{ "evenement": "quiz.completed", "points": "score * 10", "typologie": "Joueur", "si": "victoire" }],
-    "medailles": [{ "medaille": "Sans faute", "evenement": "quiz.completed", "si": "score == total" }] }
+    "medailles": [{ "medaille": "Sans faute", "evenement": "quiz.completed", "si": "score == total" }],
+    "attribuables": ["Explorateur"] }
   ```
 - `evenement` exact ou préfixe (`quiz.*`) ; `points` et `si` sont des expressions sur les données de l'événement,
   évaluées par `SafeExpressionLanguage` (ExpressionLanguage **sans** `constant()`/`enum()`, seules `min`, `max`,
@@ -574,7 +579,12 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 - **Typologies** : facultatives, « Général » par défaut (créée automatiquement). Admin › Gamification : Médailles, Typologies.
 - **Manifeste** : section `gamification` `{ regles, medailles }` ; à l'import, les règles par défaut ne sont posées que si
   l'interactif n'en a pas (jamais d'écrasement des réglages de l'admin), les médailles absentes sont créées.
-- À venir : affichage XP/médailles dans le quiz (#9), médaille demandée par l'interactif (#8), webhooks n8n (#10).
+- **Médaille demandée par l'interactif** (#8) : `POST /api/launch/{jeton}/medailles` `{medaille}` (JS :
+  `ctx.demanderMedaille()`), visiteur rattaché requis, médaille listée dans `attribuables` des règles (anti-triche ;
+  aucune par défaut), idempotent (unique : une fois par visiteur ; sinon une fois par partie), tracé dans le
+  `LogVisite` (`navinum.medaille`).
+- Le quiz affiche XP et médailles gagnés en fin de partie (#9).
+- À venir : webhooks n8n (#10).
 
 ### n8n (automatisation, communication, IA)
 
