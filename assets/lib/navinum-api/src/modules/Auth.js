@@ -7,7 +7,8 @@ import { erreurs } from './Erreurs.js';
  * @property {string} id - UUID du visiteur
  * @property {string} pseudo - Pseudo affiché
  * @property {boolean} anonyme - true pour un visiteur invité (sans compte)
- * @property {string} token - Jeton visiteur Bearer (`nvv1.…`)
+ * @property {string} token - Jeton visiteur Bearer (`nvv2.…`), valable 30 min, prolongé par l'activité (12 h au plus)
+ * @property {string} expiresAt - Expiration du jeton (ISO-8601)
  * @property {string} mode - Mode de connexion utilisé (`invite`, …)
  */
 
@@ -31,6 +32,11 @@ const MODES_A_VENIR = ['compte', 'oauth', 'rfid'];
  * partie est rattachée automatiquement au joueur : ses événements alimentent son parcours et sa
  * gamification.
  *
+ * Session : **30 minutes d'inactivité**, **12 heures au plus**. La librairie prolonge le jeton à chaque
+ * activité (événements de la partie). Après expiration, `connecter()` avec le même pseudo sur le même appareil
+ * retrouve le même profil (XP, médailles). En **mode borne** (`memoriser: false`), rien n'est conservé sur
+ * l'appareil : appeler `deconnecter()` en fin de partie.
+ *
  * Modes :
  * - `invite` (disponible) : visiteur invité à partir d'un pseudo, conservé sur l'appareil ;
  * - `compte`, `oauth`, `rfid` (à venir) : lèvent une erreur `MODE_INDISPONIBLE` en attendant ;
@@ -42,7 +48,7 @@ const MODES_A_VENIR = ['compte', 'oauth', 'rfid'];
  * const joueur = await api.auth.connecter({ pseudo: 'Léa' });   // mode « invite » par défaut
  * console.log(joueur.pseudo, joueur.anonyme);
  * api.auth.onChange(j => afficherProfil(j));      // connexion / déconnexion
- * api.auth.deconnecter();                         // « ce n'est pas moi »
+ * api.auth.oublier();                            // « ce n’est pas moi » (déconnecter() : révoque aussi)
  */
 export class Auth {
     /**
@@ -52,8 +58,8 @@ export class Auth {
         this.api = api;
         this.fournisseurs = new Map();
         this.ecouteurs = [];
-        this.ajouterMode('invite', async ({ pseudo }) => {
-            const visiteur = await api.visiteurs.identifier(pseudo);
+        this.ajouterMode('invite', async ({ pseudo, memoriser }) => {
+            const visiteur = await api.visiteurs.identifier(pseudo, { memoriser });
             return { ...visiteur };
         });
     }
@@ -91,6 +97,7 @@ export class Auth {
      * @param {Object} [options={}]
      * @param {string} [options.mode='invite'] - Mode de connexion
      * @param {string} [options.pseudo] - Pseudo (mode `invite`, 2 à 40 caractères)
+     * @param {boolean} [options.memoriser=true] - false (borne partagée) : rien n'est conservé sur l'appareil
      * @param {LaunchContext|null} [options.lancement] - Contexte de lancement ; à défaut, le dernier
      *        résolu par `api.launch()`
      * @returns {Promise<Joueur>}
@@ -115,6 +122,7 @@ export class Auth {
         }
 
         const joueur = { ...(await fournisseur(options, this.api)), mode };
+        this.memoriser = options.memoriser !== false;
         if (!joueur.token) {
             throw new ValidationError('Le mode de connexion n’a pas fourni de jeton visiteur', { token: 'requis' });
         }
@@ -150,12 +158,49 @@ export class Auth {
     }
 
     /**
-     * Déconnecte le joueur et l'oublie sur cet appareil.
+     * Déconnecte le joueur : sa session est révoquée côté serveur (jetons invalides immédiatement) et il est
+     * oublié sur cet appareil. À appeler en fin de partie sur une borne partagée. Jamais bloquant.
+     *
+     * @returns {Promise<void>}
      */
-    deconnecter() {
+    async deconnecter() {
+        const joueur = this.joueur();
+        this.oublier();
+        if (joueur && joueur.token) {
+            try {
+                await this.api.visiteurs.deconnexion(joueur.token);
+            } catch (error) {
+                this.api.config.log('Déconnexion côté serveur impossible', error);
+            }
+        }
+    }
+
+    /**
+     * Oublie le joueur sur cet appareil sans le déconnecter côté serveur (« Ce n'est pas moi »).
+     */
+    oublier() {
         this.joueurCourant = null;
         this.api.visiteurs.oublier();
         this.notifier(null);
+    }
+
+    /**
+     * Activité du joueur : prolonge sa session si elle expire bientôt. Appelé automatiquement à chaque
+     * événement de la partie (`ctx.track()`). Jamais bloquant.
+     *
+     * @returns {Promise<Joueur|null>}
+     */
+    async entretenir() {
+        const joueur = this.joueurCourant;
+        if (!joueur || !joueur.token) {
+            return null;
+        }
+        try {
+            this.joueurCourant = { ...(await this.api.visiteurs.entretenir(joueur, { memoriser: this.memoriser })), mode: joueur.mode };
+        } catch (error) {
+            this.api.config.log('Prolongation de la session impossible', error);
+        }
+        return this.joueurCourant;
     }
 
     /**

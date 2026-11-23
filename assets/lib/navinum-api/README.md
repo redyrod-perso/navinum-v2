@@ -702,6 +702,21 @@ api.auth.modes();           // ['invite']
 | `compte`, `oauth`, `rfid` | À venir : erreur `MODE_INDISPONIBLE` en attendant |
 | personnalisé | `api.auth.ajouterMode(nom, async (options, api) => ({ id, pseudo, anonyme, token }))` |
 
+**Session (lib 0.8.0) :** le jeton expire après **30 minutes d'inactivité** et au plus **12 heures** après
+l'identification. La librairie le prolonge toute seule à chaque événement de la partie (`ctx.track()`). Après
+expiration, `connecter()` avec le même pseudo **sur le même appareil** retrouve le même profil (XP, médailles) grâce
+au secret d'appareil qu'elle conserve ; sur un autre appareil, le joueur repart à zéro (compte en ligne à venir).
+
+| Méthode | Effet |
+|---------|-------|
+| `api.auth.connecter({ pseudo, memoriser })` | `memoriser: false` = **borne partagée** : rien n'est conservé sur l'appareil |
+| `await api.auth.deconnecter()` | révoque la session côté serveur et oublie le joueur (fin de partie sur une borne) |
+| `api.auth.oublier()` | oublie le joueur sur l'appareil sans révoquer (« Ce n'est pas moi ») |
+| `api.auth.entretenir()` | prolonge la session si elle expire bientôt (appelé automatiquement par `ctx.track()`) |
+
+Sur une borne, activer `modeBorne` dans la configuration du placement : le serveur laisse alors toujours le
+joueur suivant reprendre le lancement (un joueur parti sans se déconnecter ne reçoit pas ses gains).
+
 Le rattachement de la partie n'est jamais bloquant : en cas d'échec, `joueur.rattache === false` et le joueur reste
 connecté. Le stockage se règle avec l'option `storage` (`localStorage` par défaut, `null` pour ne rien conserver).
 

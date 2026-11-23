@@ -117,6 +117,15 @@ export class NavinumAPI {
      */
     async launch(token) {
         this.contexte = await this.launches.resolve(token);
+        if (this.contexte) {
+            // Chaque événement de la partie compte comme activité du joueur : sa session est prolongée
+            const track = this.contexte.track;
+            this.contexte.track = async (type, payload) => {
+                const result = await track(type, payload);
+                this.auth.entretenir();
+                return result;
+            };
+        }
         return this.contexte;
     }
 

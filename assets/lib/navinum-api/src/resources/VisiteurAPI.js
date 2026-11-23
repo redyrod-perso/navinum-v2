@@ -39,7 +39,8 @@ export class VisiteurAPI extends BaseResource {
      * Crée un visiteur invité (sans compte) à partir d'un pseudo.
      *
      * @param {string} pseudo - Pseudo, 2 à 40 caractères
-     * @returns {Promise<{visiteur: VisiteurProfil, token: string}>} Le profil et le jeton visiteur
+     * @returns {Promise<{visiteur: VisiteurProfil, token: string, expiresAt: string, appareil: string}>} Le profil,
+     *          le jeton visiteur (30 min, renouvelable) et le secret de l'appareil (pour reprendre le profil)
      * @throws {ValidationError} Si le pseudo est vide ou invalide (400)
      * @throws {NetworkError} En cas d'erreur réseau
      *
@@ -72,43 +73,134 @@ export class VisiteurAPI extends BaseResource {
     }
 
     /**
-     * Identifie le joueur : réutilise le visiteur conservé sur cet appareil s'il porte le même pseudo
-     * et que son jeton est toujours valide, sinon crée un visiteur invité et le conserve.
+     * Reprend le visiteur conservé sur cet appareil après expiration de sa session (30 min d'inactivité,
+     * 12 h au plus) : même profil (XP, médailles) si le pseudo et le secret de l'appareil correspondent.
      *
-     * C'est le point d'entrée des interactifs pour l'identification ; le futur module
-     * d'authentification (compte en ligne, OAuth, badge RFID) s'y branchera sans changement
-     * pour les interactifs. Le stockage se règle avec l'option `storage` de NavinumAPI
-     * (`localStorage` par défaut, `null` pour ne rien conserver).
+     * @param {Object} data - `{ pseudo, appareil }` (secret d'appareil `nva1.…`), ou `{ pseudo, ancienJeton }`
+     *        pour échanger un ancien jeton `nvv1` (renvoie alors aussi `appareil`)
+     * @returns {Promise<{visiteur: VisiteurProfil, token: string, expiresAt: string, appareil?: string}>}
+     * @throws {UnauthorizedError} code `NON_IDENTIFIE` : appareil inconnu ou révoqué, pseudo différent
+     */
+    async reprendre(data) {
+        return this.client.post('/api/visiteur/reprendre', data);
+    }
+
+    /**
+     * Prolonge une session encore valide de 30 min (12 h au plus depuis l'identification).
+     *
+     * @param {string} token - Jeton visiteur en cours
+     * @returns {Promise<{token: string, expiresAt: string}>}
+     * @throws {UnauthorizedError} code `NON_IDENTIFIE` : session expirée ou révoquée
+     */
+    async renouveler(token) {
+        return this.client.post('/api/visiteur/renouveler', {}, { headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    /**
+     * Déconnecte cet appareil côté serveur (ses jetons deviennent invalides immédiatement). Idempotent.
+     *
+     * @param {string} token - Jeton visiteur en cours
+     * @returns {Promise<void>}
+     */
+    async deconnexion(token) {
+        await this.client.post('/api/visiteur/deconnexion', {}, { headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    /**
+     * Identifie le joueur : session en cours si elle est valide, sinon reprise du visiteur conservé sur cet
+     * appareil (même pseudo : même profil), sinon nouveau visiteur invité.
+     *
+     * C'est la brique du module d'authentification {@link Auth} (`api.auth.connecter()`), à utiliser de
+     * préférence. Le stockage se règle avec l'option `storage` de NavinumAPI (`localStorage` par défaut).
      *
      * @param {string} pseudo - Pseudo saisi par le joueur (2 à 40 caractères)
-     * @returns {Promise<VisiteurProfil & {token: string}>} Le visiteur et son jeton (`nvv1.…`)
+     * @param {Object} [options={}]
+     * @param {boolean} [options.memoriser=true] - false : rien n'est conservé sur l'appareil (borne partagée)
+     * @returns {Promise<VisiteurProfil & {token: string, expiresAt: string, appareil?: string}>}
      * @throws {ValidationError} Si le pseudo est invalide
      * @throws {NetworkError} Si l'API est injoignable et qu'aucun visiteur n'est conservé pour ce pseudo
      *
      * @example
      * const joueur = await api.visiteurs.identifier('Alice');
-     * const ctx = await api.launch();
-     * if (ctx) await ctx.identify(joueur.token);
      */
-    async identifier(pseudo) {
+    async identifier(pseudo, options = {}) {
+        const memoriser = options.memoriser !== false;
         const value = typeof pseudo === 'string' ? pseudo.trim() : '';
-        const saved = this.courant();
+        const saved = memoriser ? this.courant() : null;
 
-        if (saved && saved.token && saved.pseudo === value) {
+        if (saved && saved.pseudo === value) {
             try {
-                await this.moi(saved.token);
-                return saved;
+                // 1. Session en cours encore valide
+                if (saved.token && !VisiteurAPI.expire(saved)) {
+                    await this.moi(saved.token);
+                    return saved;
+                }
             } catch (error) {
                 if (!(error instanceof UnauthorizedError)) {
                     return saved; // API injoignable : on garde le visiteur connu
                 }
             }
+            // 2. Session expirée : reprise sur cet appareil (même profil)
+            const reprise = saved.appareil
+                ? { pseudo: value, appareil: saved.appareil }
+                : (saved.token && saved.token.startsWith('nvv1.') ? { pseudo: value, ancienJeton: saved.token } : null);
+            if (reprise) {
+                try {
+                    const res = await this.reprendre(reprise);
+                    const joueur = { ...res.visiteur, token: res.token, expiresAt: res.expiresAt, appareil: res.appareil || saved.appareil };
+                    this.store(joueur);
+                    return joueur;
+                } catch (error) {
+                    if (!(error instanceof UnauthorizedError)) {
+                        throw error;
+                    }
+                }
+            }
         }
 
-        const { visiteur, token } = await this.inviter(value);
-        const joueur = { ...visiteur, token };
-        this.store(joueur);
+        // 3. Nouveau visiteur invité
+        const { visiteur, token, expiresAt, appareil } = await this.inviter(value);
+        const joueur = { ...visiteur, token, expiresAt, appareil };
+        if (memoriser) {
+            this.store(joueur);
+        }
         return joueur;
+    }
+
+    /**
+     * Prolonge la session conservée si elle expire bientôt (activité du joueur) ; sans effet sinon.
+     *
+     * @param {Object} joueur - Joueur `{ token, expiresAt, … }`
+     * @param {Object} [options={}]
+     * @param {boolean} [options.memoriser=true]
+     * @returns {Promise<Object>} Le joueur, avec son jeton prolongé le cas échéant
+     * @private
+     */
+    async entretenir(joueur, options = {}) {
+        if (!joueur || !joueur.token || !joueur.expiresAt || VisiteurAPI.expire(joueur)) {
+            return joueur;
+        }
+        if (Date.parse(joueur.expiresAt) - Date.now() > VisiteurAPI.MARGE_RENOUVELLEMENT) {
+            return joueur;
+        }
+        const { token, expiresAt } = await this.renouveler(joueur.token);
+        const prolonge = { ...joueur, token, expiresAt };
+        if (options.memoriser !== false) {
+            this.store(prolonge);
+        }
+        return prolonge;
+    }
+
+    /**
+     * Le jeton du joueur a-t-il expiré (horloge locale, marge de 30 s) ?
+     * @param {{expiresAt?: string}} joueur
+     * @returns {boolean}
+     */
+    static expire(joueur) {
+        if (!joueur || !joueur.expiresAt) {
+            return true; // ancien jeton sans date : à reprendre
+        }
+        return Date.parse(joueur.expiresAt) - Date.now() < 30 * 1000;
     }
 
     /**
@@ -168,5 +260,8 @@ export class VisiteurAPI extends BaseResource {
         return this.client.post(`${this.basePath}/register`, data);
     }
 }
+
+/** Le jeton est prolongé quand il lui reste moins de 15 minutes (activité du joueur). */
+VisiteurAPI.MARGE_RENOUVELLEMENT = 15 * 60 * 1000;
 
 export default VisiteurAPI;

@@ -7,6 +7,26 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.8.0] - 2026-11-23
+
+Sessions visiteur à durée limitée (#6).
+
+### Added
+- Jeton visiteur `nvv2` : **30 min d'inactivité**, **12 h au plus**, révocable. `api.auth` le prolonge à chaque
+  événement de la partie (`ctx.track()` → `api.auth.entretenir()`).
+- Reprise sur le même appareil : après expiration, `connecter()` / `visiteurs.identifier()` avec le même pseudo
+  retrouve le même profil grâce au secret d'appareil conservé (`nva1.…`).
+- `api.auth.connecter({ memoriser: false })` (borne partagée), `api.auth.oublier()` (« Ce n'est pas moi »).
+- `api.visiteurs.reprendre()`, `renouveler()`, `deconnexion()`.
+
+### Changed
+- `api.auth.deconnecter()` est asynchrone et **révoque la session côté serveur** (avant : oubli local seulement,
+  désormais `api.auth.oublier()`).
+- Les anciens jetons `nvv1` ne sont plus acceptés comme jetons d'accès ; la librairie les échange une fois contre un
+  appareil (les visiteurs existants gardent leur profil).
+
+---
+
 ## [0.7.0] - 2026-11-23
 
 ### Added
