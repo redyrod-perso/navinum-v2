@@ -1,0 +1,8 @@
+{% extends 'admin/crud/index.html.twig' %}
+{% block row_actions %}
+    <form class="d-inline" method="post" action="{{ path('admin_visiteur_deconnecter', {id: item.id}) }}"
+          onsubmit="return confirm('Déconnecter ce visiteur de tous ses appareils ?')">
+        <input type="hidden" name="_token" value="{{ csrf_token('deconnecter' ~ item.id) }}">
+        <button class="btn btn-sm btn-outline-danger" title="Déconnecter partout (badge perdu, appareil volé)"><i class="bi bi-box-arrow-right"></i></button>
+    </form>
+{% endblock %}

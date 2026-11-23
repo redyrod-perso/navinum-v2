@@ -8,7 +8,9 @@ use App\Entity\LogVisite;
 use App\Controller\Api\VisiteurController;
 use App\Entity\ParcoursInteractif;
 use App\Entity\Visiteur;
+use App\Entity\VisiteurAppareil;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Mercure\HubInterface;
@@ -27,6 +29,7 @@ final class LaunchService
         private readonly HubInterface $hub,
         private readonly LoggerInterface $logger,
         private readonly RequestStack $requests,
+        private readonly ClockInterface $clock,
     ) {
     }
 
@@ -121,13 +124,23 @@ final class LaunchService
     /**
      * Rattache un visiteur à un lancement (et au LogVisite déjà commencé, le cas échéant).
      *
-     * @return bool false si le lancement appartient déjà à un autre visiteur
+     * Le même lancement peut servir à plusieurs joueurs successifs ; le nouveau joueur le reprend
+     * (ses événements partent dans un nouveau LogVisite) :
+     * - toujours en **mode borne** (`modeBorne` dans la configuration du placement, fixée par l'admin) : un
+     *   joueur parti sans se déconnecter ne doit ni bloquer la borne ni recevoir les gains des suivants ;
+     * - sinon, dès que le précédent n'est plus actif (déconnecté, ou 30 min sans activité).
+     *
+     * @return bool false si le lancement appartient à un autre visiteur encore actif (hors mode borne)
      */
     public function identify(LaunchToken $token, Visiteur $visiteur): bool
     {
         $current = $token->getVisiteur();
         if (null !== $current && !$current->getId()->equals($visiteur->getId())) {
-            return false;
+            $borne = true === ($token->getConfig()['modeBorne'] ?? false);
+            if (!$borne && $this->isActive($current)) {
+                return false;
+            }
+            $token->setLogVisite(null); // la partie du joueur précédent reste à son nom
         }
         $token->setVisiteur($visiteur);
         if (null !== ($log = $token->getLogVisite()) && null === $log->getVisiteur()) {
@@ -136,6 +149,20 @@ final class LaunchService
         $this->em->flush();
 
         return true;
+    }
+
+    /** Le visiteur a-t-il une session en cours (appareil non révoqué, actif depuis moins de 30 min) ? */
+    private function isActive(Visiteur $visiteur): bool
+    {
+        $depuis = $this->clock->now()->modify(\sprintf('-%d seconds', VisiteurToken::INACTIVITE));
+
+        return (int) $this->em->createQueryBuilder()
+            ->select('COUNT(a.id)')
+            ->from(VisiteurAppareil::class, 'a')
+            ->where('a.visiteur = :visiteur AND a.revokedAt IS NULL AND a.lastSeenAt > :depuis')
+            ->setParameter('visiteur', $visiteur->getId(), 'uuid')
+            ->setParameter('depuis', $depuis)
+            ->getQuery()->getSingleScalarResult() > 0;
     }
 
     /**
