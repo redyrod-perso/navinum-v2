@@ -151,6 +151,25 @@ final class LaunchService
         return true;
     }
 
+    /** Journal de visite d'un joueur qui utilise un lancement rattaché à un autre visiteur (créé au besoin). */
+    private function journalAutreJoueur(LaunchToken $token, ?Visiteur $joueur): LogVisite
+    {
+        $connection = 'launch:'.substr($token->getToken(), 0, 16).':'.($joueur ? $joueur->getId()->toRfc4122() : 'inconnu');
+        $log = $this->em->getRepository(LogVisite::class)->findOneBy(['connection' => $connection]);
+        if (null === $log) {
+            $log = (new LogVisite())
+                ->setInteractif($token->getInteractif())
+                ->setInteractifLibelle($token->getInteractif()->getLibelle())
+                ->setVisiteur($joueur)
+                ->setExposition($token->getExposition())
+                ->setConnection($connection)
+                ->setStartAt(new \DateTime());
+            $this->em->persist($log);
+        }
+
+        return $log;
+    }
+
     /** Le visiteur a-t-il une session en cours (appareil non révoqué, actif depuis moins de 30 min) ? */
     private function isActive(Visiteur $visiteur): bool
     {
@@ -170,9 +189,14 @@ final class LaunchService
      * - `payload.score` (entier) met à jour le score ;
      * - un type finissant par `.completed` ou `.ended` clôt la visite (end_at).
      */
-    public function recordEvent(LaunchToken $token, string $type, array $payload): LogVisite
+    /**
+     * @param array{visiteur: ?Visiteur}|null $autreJoueur événement envoyé par un autre joueur que le visiteur
+     *        rattaché au lancement (lien réutilisé) : consigné dans un journal à part (à son nom s'il est
+     *        identifié), jamais dans celui du titulaire
+     */
+    public function recordEvent(LaunchToken $token, string $type, array $payload, ?array $autreJoueur = null): LogVisite
     {
-        $log = $token->getLogVisite();
+        $log = null === $autreJoueur ? $token->getLogVisite() : $this->journalAutreJoueur($token, $autreJoueur['visiteur'] ?? null);
         if (null === $log) {
             $log = (new LogVisite())
                 ->setInteractif($token->getInteractif())

@@ -239,6 +239,17 @@ class VisiteurSessionTest extends WebTestCase
         $this->assertTrue($partieDAlice['body']['rattache']);
         $this->assertSame(10, $partieDAlice['body']['gamification']['totalXp'], 'Alice : seulement sa propre partie');
 
+        // #56 : la partie de Bob n'est pas dans le journal de visite d'Alice, mais dans le sien
+        $journaux = $em->getRepository(LogVisite::class)->findBy(['interactif' => $quiz]);
+        $parVisiteur = [];
+        foreach ($journaux as $journal) {
+            $parVisiteur[(string) $journal->getVisiteur()?->getId()] = \count(json_decode($journal->getResultats(), true));
+        }
+        ksort($parVisiteur);
+        $attendu = [$alice['visiteur']['id'] => 1, $bob['visiteur']['id'] => 1];
+        ksort($attendu);
+        $this->assertSame($attendu, $parVisiteur, 'un journal par joueur, un événement chacun');
+
         // Sans jeton visiteur : lancement préparé par Navinum pour ce visiteur, crédité comme avant
         $this->assertSame(20, $this->call('POST', "/api/launch/$l/events", ['type' => 'quiz.completed', 'payload' => []])['body']['gamification']['totalXp']);
     }

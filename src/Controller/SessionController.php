@@ -3,6 +3,7 @@
 namespace App\Controller;
 
 use App\Repository\LaunchTokenRepository;
+use App\Service\QuizSessions;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -21,8 +22,6 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  */
 class SessionController extends AbstractController
 {
-    private const SESSIONS_DIR = '/var/cache/sessions';
-
     /** Une partie sans activité depuis ce délai est considérée comme abandonnée (le groupe est libéré). */
     public const ABANDON_DELAY = 15 * 60;
 
@@ -40,6 +39,7 @@ class SessionController extends AbstractController
         private readonly HubInterface $hub,
         private readonly LoggerInterface $logger,
         private readonly LaunchTokenRepository $launchTokens,
+        private readonly QuizSessions $sessions,
     ) {
     }
 
@@ -47,24 +47,6 @@ class SessionController extends AbstractController
     public static function sessionTopic(string $sessionId): string
     {
         return '/navinum/sessions/'.$sessionId;
-    }
-
-    private function getSessionsPath(): string
-    {
-        $path = $this->getParameter('kernel.project_dir') . self::SESSIONS_DIR;
-        if (!is_dir($path)) {
-            mkdir($path, 0777, true);
-        }
-        return $path;
-    }
-
-    /**
-     * Fichier d'une session : nom dérivé d'un hachage de l'identifiant (le nom du groupe, saisi par
-     * les joueurs), pour que n'importe quel nom reste un simple fichier du dossier des sessions.
-     */
-    private function sessionFile(string $sessionId): string
-    {
-        return $this->getSessionsPath().'/'.hash('sha256', $sessionId).'.json';
     }
 
     private static function isValidId(string $sessionId): bool
@@ -109,11 +91,7 @@ class SessionController extends AbstractController
 
     private function getSession(string $sessionId): ?array
     {
-        $file = $this->sessionFile($sessionId);
-        if (!file_exists($file)) {
-            return null;
-        }
-        return json_decode(file_get_contents($file), true);
+        return $this->sessions->get($sessionId);
     }
 
     /**
@@ -131,17 +109,12 @@ class SessionController extends AbstractController
 
     private function deleteSession(string $sessionId): void
     {
-        $file = $this->sessionFile($sessionId);
-        if (is_file($file)) {
-            unlink($file);
-        }
+        $this->sessions->delete($sessionId);
     }
 
     private function saveSession(string $sessionId, array $session): void
     {
-        $session['lastUpdate'] = time();
-        $file = $this->sessionFile($sessionId);
-        file_put_contents($file, json_encode($session));
+        $this->sessions->save($sessionId, $session);
     }
 
     /** Publie l'état courant de la session aux joueurs abonnés (best effort : n'interrompt jamais le jeu). */
@@ -378,16 +351,7 @@ class SessionController extends AbstractController
     #[IsGranted('ROLE_ADMIN')]
     public function clearAllSessions(): JsonResponse
     {
-        $path = $this->getSessionsPath();
-        $files = glob($path . '/*.json');
-
-        $count = 0;
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                unlink($file);
-                $count++;
-            }
-        }
+        $count = $this->sessions->clear();
 
         return new JsonResponse([
             'status' => 'ok',

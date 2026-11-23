@@ -302,7 +302,10 @@ function QuizApp() {
                 gagnant: etat.gagnant,
                 victoire: etat.victoire,
                 joueurs: etat.joueurs.length,
-                duree: etat.debut ? Math.round((Date.now() - etat.debut) / 1000) : null
+                duree: etat.debut ? Math.round((Date.now() - etat.debut) / 1000) : null,
+                // Le serveur reprend score, total et victoire de cette session (règle scoreSession)
+                groupe: etat.groupe,
+                joueur: etat.moi
             }).then(gains => {
                 setGains(gains);
                 // Borne : le joueur suivant ne doit pas jouer sous ce nom

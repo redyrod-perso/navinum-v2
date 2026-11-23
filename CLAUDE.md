@@ -438,7 +438,7 @@ Nombre maximum de joueurs **imposé par le serveur** : `create`/`join` reçoiven
 session garde `maxPlayers` = `joueursMax` de la configuration du lancement (8 sans jeton, 50 au plus) ; au-delà, 409
 `GROUPE_COMPLET`.
 
-Les sessions sont des fichiers de `var/cache/sessions/` nommés par un hachage du nom du groupe (tout nom saisi reste
+Les sessions (service `QuizSessions`) sont des fichiers de `var/cache/sessions/` nommés par un hachage du nom du groupe (tout nom saisi reste
 un simple fichier de ce dossier, 100 caractères max).
 
 **Temps réel :** chaque changement de session est publié sur le hub Mercure intégré, topic
@@ -604,6 +604,13 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
   aucune par défaut), idempotent (unique : une fois par visiteur ; sinon une fois par partie), tracé dans le
   `LogVisite` (`navinum.medaille`).
 - Le quiz affiche XP et médailles gagnés en fin de partie (#9).
+- **Scores contrôlés par le serveur** (#57) : règle `scoreSession` (ex. `["quiz.completed"]`) — pour ces événements,
+  `SessionScoreVerifier` reprend `score`, `total` (questions du thème d'après la configuration du lancement) et
+  `victoire` de la session multijoueur (`payload.groupe`, `payload.joueur`), contrôlée point par point ; sans session
+  retrouvée : score 0, `verifie: false`. L'import du manifeste n'ajoute pas cette règle à un interactif qui a déjà
+  des règles : l'ajouter dans l'admin (Interactifs › 🏆).
+- Joueur non rattaché à un lancement réutilisé (#56) : ni gains, ni événements dans le journal du titulaire ; ses
+  événements vont dans son propre `LogVisite` (`connection` = `launch:<jeton>:<visiteur>`).
 - À venir : webhooks n8n (#10).
 
 ### n8n (automatisation, communication, IA)
