@@ -56,7 +56,8 @@ assets/lib/navinum-api/
 ├── src/
 │   ├── core/              # Socle (ApiClient, Config, Errors, Realtime)
 │   ├── resources/         # Appels HTTP par ressource du serveur (Session, Visiteur…), sans logique
-│   ├── modules/           # Modules réutilisables sans HTML : erreurs/, auth/, gamification/ (multijoueur/ à venir)
+│   ├── modules/           # Modules réutilisables sans HTML : erreurs/, auth/, gamification/, multijoueur/
+│   ├── react/             # Hooks React facultatifs (NavinumAPI.creerHooksReact(React))
 │   └── index.js           # Point d'entrée
 ├── dist/                  # Builds générés (dev + prod)
 ├── README.md              # Documentation complète
@@ -322,6 +323,8 @@ api.interactifs.chargerManifeste()   // { manifest, defaults }
 // Modules réutilisables (sans HTML ni design ; points d'entrée @navinum/api/erreurs|auth|gamification)
 api.gamification.evenement(type, payload)  // gains { xp, medailles, totalXp } ou null, jamais bloquant
 api.gamification.onGains(cb) / demanderMedaille() / bilan()
+api.multijoueur.partie({ objectif })      // rejoindre(), demarrer(), marquerPoint(), terminer(), quitter(), onChange()
+NavinumAPI.creerHooksReact(React)         // usePartie, useJoueur, useGains (hooks facultatifs)
 api.auth.connecter({ pseudo })       // joueur + jeton visiteur, partie lancée rattachée automatiquement
 api.auth.joueur() / deconnecter()
 NavinumAPI.erreurs.decrire(err)      // { code, titre, message, reessayable, action, … } — aucun affichage
@@ -412,8 +415,9 @@ l'action conseillée. Côté Symfony, toute réponse d'erreur d'API destinée au
 
 **Technologies:** React 18 + Navinum API Client
 
-**Fonctionnalités:**
-- Lobby multi-joueurs avec polling temps réel
+**Fonctionnalités:** (logique dans les modules de la librairie — `api.multijoueur`, `api.auth`, `api.gamification` ;
+`app.jsx` ne contient que l'affichage et les questions : c'est l'exemple de référence pour un nouvel interactif)
+- Lobby multi-joueurs en temps réel (Mercure)
 - Sélection de thème
 - Questions à choix multiples
 - Scores en temps réel
