@@ -15,12 +15,16 @@ import { Stockage } from './Stockage.js';
  */
 
 /**
- * Fournisseur d'un mode de connexion : reçoit les options de `connecter()` et la librairie,
- * et rend un {@link Joueur} (au minimum `id`, `pseudo`, `token`).
- * @callback FournisseurAuth
- * @param {Object} options - Options passées à {@link Auth#connecter}
- * @param {NavinumAPI} api - Instance de la librairie
- * @returns {Promise<Joueur>}
+ * Mode de connexion branchable (invité, compte en ligne, OAuth, badge RFID…). Tous délivrent le même jeton
+ * visiteur Bearer (`nvv2.…`) : l'interactif ne voit aucune différence.
+ *
+ * @typedef {Object} ModeConnexion
+ * @property {function(Object, NavinumAPI): Promise<Joueur>} connecter - Reçoit les options de
+ *           {@link Auth#connecter} ; rend au minimum `{ id, pseudo, token }`
+ * @property {function(Joueur, {memoriser: boolean}, NavinumAPI): Promise<Joueur>} [entretenir] - Prolonge la
+ *           session sur activité (facultatif : sinon, la session n'est pas prolongée)
+ * @property {function(Joueur, NavinumAPI): Promise<void>} [deconnecter] - Révoque la session côté serveur
+ *           (facultatif : par défaut, révocation du jeton visiteur, `POST /api/visiteur/deconnexion`)
  */
 
 /** Modes prévus par la feuille de route, pas encore branchés côté serveur. */
@@ -62,9 +66,12 @@ export class Auth {
         this.ecouteurs = [];
         /** Joueur conservé sur l'appareil. */
         this.stockage = new Stockage(api.config);
-        /** Mode « invité » (pseudo seul). */
+        /** Mode « invité » (pseudo seul) : première implémentation du contrat {@link ModeConnexion}. */
         this.modeInvite = new ModeInvite(api.visiteurs, this.stockage);
-        this.ajouterMode('invite', async ({ pseudo, memoriser }) => ({ ...(await this.modeInvite.connecter({ pseudo, memoriser })) }));
+        this.ajouterMode('invite', {
+            connecter: async ({ pseudo, memoriser }) => ({ ...(await this.modeInvite.connecter({ pseudo, memoriser })) }),
+            entretenir: (joueur, { memoriser }) => this.modeInvite.entretenir(joueur, { memoriser }),
+        });
     }
 
     /**
@@ -82,16 +89,21 @@ export class Auth {
      * Ajoute (ou remplace) un mode de connexion.
      *
      * @param {string} nom - Nom du mode
-     * @param {FournisseurAuth} fournisseur - Fonction qui connecte le joueur
+     * @param {ModeConnexion|function(Object, NavinumAPI): Promise<Joueur>} mode - Objet `{ connecter, entretenir?,
+     *        deconnecter? }`, ou simplement la fonction `connecter`
      *
      * @example
-     * api.auth.ajouterMode('kiosque', async () => ({ id: 'x', pseudo: 'Borne 3', anonyme: true, token: '…' }));
+     * api.auth.ajouterMode('rfid', {
+     *     connecter: async ({ badge }, api) => echangerBadgeContreJeton(badge),
+     *     entretenir: async (joueur) => prolonger(joueur),
+     * });
      */
-    ajouterMode(nom, fournisseur) {
-        if (!nom || typeof fournisseur !== 'function') {
+    ajouterMode(nom, mode) {
+        const contrat = typeof mode === 'function' ? { connecter: mode } : mode;
+        if (!nom || !contrat || typeof contrat.connecter !== 'function') {
             throw new ValidationError('Mode de connexion invalide', { mode: 'requis' });
         }
-        this.fournisseurs.set(nom, fournisseur);
+        this.fournisseurs.set(nom, contrat);
     }
 
     /**
@@ -117,14 +129,14 @@ export class Auth {
      */
     async connecter(options = {}) {
         const mode = options.mode || 'invite';
-        const fournisseur = this.fournisseurs.get(mode);
-        if (!fournisseur) {
+        const contrat = this.fournisseurs.get(mode);
+        if (!contrat) {
             throw erreurs.creer('MODE_INDISPONIBLE', MODES_A_VENIR.includes(mode)
                 ? `La connexion « ${mode} » n’est pas encore disponible.`
                 : `Mode de connexion inconnu : « ${mode} ».`);
         }
 
-        const joueur = { ...(await fournisseur(options, this.api)), mode };
+        const joueur = { ...(await contrat.connecter(options, this.api)), mode };
         this.memoriser = options.memoriser !== false;
         if (!joueur.token) {
             throw new ValidationError('Le mode de connexion n’a pas fourni de jeton visiteur', { token: 'requis' });
@@ -160,7 +172,7 @@ export class Auth {
     joueur() {
         if (this.joueurCourant) return this.joueurCourant;
         const conserve = this.stockage.lire();
-        return conserve ? { ...conserve, mode: 'invite' } : null;
+        return conserve ? { mode: 'invite', ...conserve } : null;
     }
 
     /**
@@ -173,8 +185,13 @@ export class Auth {
         const joueur = this.joueur();
         this.oublier();
         if (joueur && joueur.token) {
+            const contrat = this.fournisseurs.get(joueur.mode);
             try {
-                await this.api.visiteurs.deconnexion(joueur.token);
+                if (contrat && typeof contrat.deconnecter === 'function') {
+                    await contrat.deconnecter(joueur, this.api);
+                } else {
+                    await this.api.visiteurs.deconnexion(joueur.token);
+                }
             } catch (error) {
                 this.api.config.log('Déconnexion côté serveur impossible', error);
             }
@@ -198,11 +215,12 @@ export class Auth {
      */
     async entretenir() {
         const joueur = this.joueurCourant;
-        if (!joueur || !joueur.token) {
-            return null;
+        const contrat = joueur ? this.fournisseurs.get(joueur.mode) : null;
+        if (!joueur || !joueur.token || !contrat || typeof contrat.entretenir !== 'function') {
+            return joueur || null;
         }
         try {
-            this.joueurCourant = { ...(await this.modeInvite.entretenir(joueur, { memoriser: this.memoriser })), mode: joueur.mode };
+            this.joueurCourant = { ...(await contrat.entretenir(joueur, { memoriser: this.memoriser !== false }, this.api)), mode: joueur.mode };
         } catch (error) {
             this.api.config.log('Prolongation de la session impossible', error);
         }

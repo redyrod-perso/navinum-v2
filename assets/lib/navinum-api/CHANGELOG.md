@@ -7,6 +7,22 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.11.0] - 2026-11-24
+
+Module d'authentification finalisé (#3).
+
+### Added
+- **Contrat des modes de connexion** : `api.auth.ajouterMode(nom, { connecter, entretenir?, deconnecter? })`. La
+  prolongation (`entretenir()`) et la déconnexion passent par le mode du joueur (avant : toujours le mode invité),
+  prêt pour le compte en ligne, OAuth (#4) et le badge RFID (#5). Une simple fonction reste acceptée.
+- **Exemple d'intégration** sans React : `public/exemples/identification/index.html`.
+
+### Fixed
+- `NavinumAPI.erreurs.decrire()` remplaçait le message précis d'une erreur levée par la librairie elle-même
+  (ex. « Le pseudo doit faire entre 2 et 40 caractères ») par le message générique du catalogue.
+
+---
+
 ## [0.10.0] - 2026-11-24
 
 Modules réutilisables, partie 2 (#53).

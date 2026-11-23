@@ -329,6 +329,8 @@ api.multijoueur.groupes                   // lister(), onCree(), trouver(), trou
 // Règle : resources/ = appels HTTP seulement ; toute logique (session, groupes par nom…) dans modules/
 NavinumAPI.creerHooksReact(React)         // usePartie, useJoueur, useGains (hooks facultatifs)
 api.auth.connecter({ pseudo })       // joueur + jeton visiteur, partie lancée rattachée automatiquement
+api.auth.ajouterMode(nom, { connecter, entretenir?, deconnecter? })  // contrat des modes (compte, OAuth, RFID)
+// Exemple d'intégration sans React : public/exemples/identification/index.html
 api.auth.joueur() / deconnecter()
 NavinumAPI.erreurs.decrire(err)      // { code, titre, message, reessayable, action, … } — aucun affichage
 api.onError(info => …)               // toutes les erreurs d'API (journal)
