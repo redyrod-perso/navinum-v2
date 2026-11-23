@@ -7,6 +7,21 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.12.0] - 2026-11-24
+
+Comptes en ligne (#4, partie 1).
+
+### Added
+- **Mode `compte`** : `api.auth.connecter({ mode: 'compte', email, motDePasse })` ; sans mot de passe, reprise de la
+  session du compte conservée sur l'appareil.
+- `api.auth.creerCompte({ email, motDePasse, pseudo?, newsletter? })` : un invité connecté devient un compte et garde
+  ses XP, médailles et historique.
+- `api.visiteurs.inscription()`, `connexion()` ; codes d'erreur `EMAIL_DEJA_UTILISE`, `IDENTIFIANTS_INVALIDES`,
+  `TROP_DE_TENTATIVES` (statut 429).
+- Exemple d'identification : formulaire de compte (création depuis un invité, connexion).
+
+---
+
 ## [0.11.0] - 2026-11-24
 
 Module d'authentification finalisé (#3).

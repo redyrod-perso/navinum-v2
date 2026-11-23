@@ -2,6 +2,7 @@ import { ValidationError } from '../../core/Errors.js';
 import { erreurs } from '../erreurs/Erreurs.js';
 import { ModeInvite } from './ModeInvite.js';
 import { Stockage } from './Stockage.js';
+import { ModeCompte } from './ModeCompte.js';
 
 /**
  * Joueur connecté : profil public et jeton visiteur.
@@ -28,7 +29,7 @@ import { Stockage } from './Stockage.js';
  */
 
 /** Modes prévus par la feuille de route, pas encore branchés côté serveur. */
-const MODES_A_VENIR = ['compte', 'oauth', 'rfid'];
+const MODES_A_VENIR = ['oauth', 'rfid'];
 
 /**
  * Module d'authentification des joueurs, partagé par tous les interactifs.
@@ -45,7 +46,8 @@ const MODES_A_VENIR = ['compte', 'oauth', 'rfid'];
  *
  * Modes :
  * - `invite` (disponible) : visiteur invité à partir d'un pseudo, conservé sur l'appareil ;
- * - `compte`, `oauth`, `rfid` (à venir) : lèvent une erreur `MODE_INDISPONIBLE` en attendant ;
+ * - `compte` (disponible) : adresse e-mail + mot de passe ; `creerCompte()` transforme un invité en compte ;
+ * - `oauth`, `rfid` (à venir) : lèvent une erreur `MODE_INDISPONIBLE` en attendant ;
  * - modes personnalisés : {@link Auth#ajouterMode}.
  *
  * @class
@@ -71,6 +73,13 @@ export class Auth {
         this.ajouterMode('invite', {
             connecter: async ({ pseudo, memoriser }) => ({ ...(await this.modeInvite.connecter({ pseudo, memoriser })) }),
             entretenir: (joueur, { memoriser }) => this.modeInvite.entretenir(joueur, { memoriser }),
+        });
+        /** Mode « compte » (e-mail + mot de passe). */
+        this.modeCompte = new ModeCompte(api.visiteurs, this.stockage);
+        this.ajouterMode('compte', {
+            connecter: (options) => this.modeCompte.connecter(options),
+            // Même renouvellement que l'invité ; le joueur conservé garde son mode `compte`
+            entretenir: (joueur, { memoriser }) => this.modeInvite.entretenir({ ...joueur, mode: 'compte' }, { memoriser }),
         });
     }
 
@@ -141,7 +150,36 @@ export class Auth {
         if (!joueur.token) {
             throw new ValidationError('Le mode de connexion n’a pas fourni de jeton visiteur', { token: 'requis' });
         }
+        return this.ouvrir(joueur, options);
+    }
 
+    /**
+     * Crée un compte (e-mail + mot de passe). Si un **invité** est connecté, c'est lui qui devient un compte :
+     * il garde ses XP, médailles et historique. Le joueur est ensuite connecté (mode `compte`).
+     *
+     * @param {Object} options
+     * @param {string} options.email - Adresse e-mail (jamais visible dans le profil public)
+     * @param {string} options.motDePasse - 8 caractères au moins
+     * @param {string} [options.pseudo] - Pseudo affiché (par défaut : celui de l'invité)
+     * @param {boolean} [options.newsletter=false] - Consentement explicite à la newsletter
+     * @param {boolean} [options.memoriser=true]
+     * @returns {Promise<Joueur>}
+     * @throws {NavinumAPIError} `VALIDATION`, `EMAIL_DEJA_UTILISE`, `TROP_DE_TENTATIVES`
+     *
+     * @example
+     * const joueur = await api.auth.creerCompte({ email, motDePasse, newsletter: caseCochee });
+     */
+    async creerCompte(options = {}) {
+        const joueur = { ...(await this.modeCompte.creerCompte(options, this.joueurCourant)), mode: 'compte' };
+        this.memoriser = options.memoriser !== false;
+        return this.ouvrir(joueur, options);
+    }
+
+    /**
+     * Rattache la partie lancée au joueur (jamais bloquant) puis le déclare connecté.
+     * @private
+     */
+    async ouvrir(joueur, options) {
         const lancement = options.lancement !== undefined ? options.lancement : this.api.contexte;
         if (lancement && typeof lancement.identify === 'function') {
             try {

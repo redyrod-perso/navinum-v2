@@ -478,6 +478,16 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
   (ou `{pseudo, ancienJeton}` pour échanger un ancien `nvv1`) ; `POST /api/visiteur/deconnexion` révoque l'appareil ;
   admin › Visiteurs › « Déconnecter partout » révoque tous ses appareils. Changement de `APP_SECRET` : mettre l'ancien
   dans `VISITEUR_SECRET_PRECEDENT` (facultative) au moins 30 min.
+- **Comptes en ligne (#4)** : `POST /api/visiteur/inscription` `{email, motDePasse, pseudo?, newsletter?}` (Bearer d'un
+  invité facultatif : il **devient** le compte, mêmes XP) et `POST /api/visiteur/connexion` `{email, motDePasse}` → même
+  jeton visiteur. Service `CompteVisiteur` : adresse unique en minuscules (`uniq_visiteur_email`), mot de passe haché
+  (hasher `visiteur`, champ `password_son`), newsletter seulement sur consentement explicite, `emailVerifieAt` (null
+  tant que l'envoi d'e-mails n'est pas branché). Refus : `IDENTIFIANTS_INVALIDES` (message identique compte existant
+  ou non), `EMAIL_DEJA_UTILISE`, `TROP_DE_TENTATIVES` (rate limiter `connexion_visiteur` 10 échecs / 15 min par IP +
+  adresse ; `inscription_visiteur` 20 / h par IP). Admin › Visiteurs : champ « Nouveau mot de passe » (haché ; plus
+  jamais d'affichage du mot de passe). Côté JS : mode `compte`, `api.auth.creerCompte()`.
+- **Authentificateur du pare-feu `api`** : `VisiteurAuthenticator`, jeton Bearer `nvv2` valide → `VisiteurUser`
+  (ROLE_VISITEUR) ; tolérant (jeton invalide : requête sans authentification) ; point d'entrée 401 `NON_IDENTIFIE`.
 - **Borne partagée** : `modeBorne` dans la configuration du placement (quiz : déconnexion en fin de partie, rien de
   conservé sur l'appareil). Un nouveau joueur reprend le lancement si le précédent n'est plus actif, et **toujours** en
   mode borne (le joueur parti sans se déconnecter ne reçoit pas les gains des suivants). Les gains ne vont qu'au
@@ -580,7 +590,8 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
   local et sur le matériel équipé.
 - Tous délivrent le même **jeton Bearer** visiteur (format actuel `nvv2.…` : expiration, révocation et
   rafraîchissement — faits en #6). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
-- Actuel : visiteur invité par pseudo, session de 30 min (12 h au plus), profil repris sur le même appareil (#6).
+- Actuel : visiteur invité par pseudo, session de 30 min (12 h au plus), profil repris sur le même appareil (#6) ;
+  comptes e-mail + mot de passe (#4). À venir : OAuth Google (#4, suite), e-mails de compte via Brevo, badge RFID (#5).
 
 ### Gamification (XP, médailles) — implémentée (#7)
 

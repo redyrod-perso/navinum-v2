@@ -54,6 +54,9 @@ export const CODES = Object.freeze({
     SCORE_REFUSE: { titre: 'Score refusé', message: 'Ce score n’a pas été accepté par le serveur.', reessayable: false, action: ACTIONS.AUCUNE },
     MEDAILLE_NON_ATTRIBUABLE: { titre: 'Médaille non attribuable', message: 'Cette médaille ne peut pas être attribuée par cet interactif.', reessayable: false, action: ACTIONS.AUCUNE },
     MEDAILLE_INCONNUE: { titre: 'Médaille inconnue', message: 'Cette médaille n’existe pas.', reessayable: false, action: ACTIONS.AUCUNE },
+    EMAIL_DEJA_UTILISE: { titre: 'Adresse déjà utilisée', message: 'Un compte existe déjà avec cette adresse : connectez-vous.', reessayable: false, action: ACTIONS.SE_RECONNECTER },
+    IDENTIFIANTS_INVALIDES: { titre: 'Connexion impossible', message: 'Adresse e-mail ou mot de passe incorrect.', reessayable: false, action: ACTIONS.CORRIGER },
+    TROP_DE_TENTATIVES: { titre: 'Trop de tentatives', message: 'Trop de tentatives : réessayez dans quelques minutes.', reessayable: true, action: ACTIONS.ATTENDRE },
     MODE_INDISPONIBLE: { titre: 'Connexion indisponible', message: 'Ce mode de connexion n’est pas encore disponible.', reessayable: false, action: ACTIONS.AUCUNE },
     INCONNU: { titre: 'Erreur inattendue', message: 'Une erreur inattendue est survenue.', reessayable: true, action: ACTIONS.REESSAYER }
 });
@@ -184,6 +187,7 @@ export class Erreurs {
         if (erreur instanceof NavinumAPIError) {
             if (erreur.status === 403) return 'NON_AUTORISE';
             if (erreur.status === 409) return 'CONFLIT';
+            if (erreur.status === 429) return 'TROP_DE_TENTATIVES';
             if (erreur.status >= 500) return 'SERVEUR';
         }
         // fetch hors librairie / navigateur hors ligne
