@@ -22,6 +22,8 @@ import { LaunchAPI, LAUNCH_TOKEN_PARAM } from './resources/LaunchAPI.js';
 import { Erreurs, erreurs, CODES, ACTIONS } from './modules/erreurs/Erreurs.js';
 import { Auth } from './modules/auth/Auth.js';
 import { Gamification } from './modules/gamification/Gamification.js';
+import { Multijoueur, Partie } from './modules/multijoueur/Partie.js';
+import { creerHooks } from './react/hooks.js';
 
 /**
  * Navinum API Client
@@ -74,6 +76,9 @@ export class NavinumAPI {
         this.visiteurs.auth = this.auth; // alias obsolètes api.visiteurs.identifier()/courant()/oublier()
         /** Gamification : événements, XP et médailles gagnés (voir {@link Gamification}). */
         this.gamification = new Gamification(this);
+        /** Parties multijoueur : groupe, lobby, scores, gagnant (voir {@link Partie}). */
+        this.multijoueur = new Multijoueur(this);
+        this.rfidGroupes.groupes = this.multijoueur.groupes; // alias obsolètes api.rfidGroupes.findByNom()/findOrCreate()
         /** Dernier contexte de lancement résolu par {@link NavinumAPI#launch} (null en mode autonome). */
         this.contexte = null;
     }
@@ -120,7 +125,8 @@ export class NavinumAPI {
      * }
      */
     async launch(token) {
-        this.contexte = await this.launches.resolve(token);
+        // Les événements portent le jeton du joueur connecté dans cette page (gains jamais crédités à un autre)
+        this.contexte = await this.launches.resolve(token, { jetonJoueur: () => this.auth.joueurCourant?.token ?? null });
         if (this.contexte) {
             // Chaque événement de la partie compte comme activité du joueur : sa session est prolongée
             const track = this.contexte.track;
@@ -192,6 +198,10 @@ NavinumAPI.erreurs = erreurs;
 NavinumAPI.Erreurs = Erreurs;
 NavinumAPI.Auth = Auth;
 NavinumAPI.Gamification = Gamification;
+NavinumAPI.Multijoueur = Multijoueur;
+NavinumAPI.Partie = Partie;
+/** Couche React facultative : `const { usePartie } = NavinumAPI.creerHooksReact(React)`. */
+NavinumAPI.creerHooksReact = creerHooks;
 
 // Export des erreurs pour utilisation externe
 export {
@@ -209,7 +219,10 @@ export {
     CODES,
     ACTIONS,
     Auth,
-    Gamification
+    Gamification,
+    Multijoueur,
+    Partie,
+    creerHooks
 };
 
 // Export par défaut

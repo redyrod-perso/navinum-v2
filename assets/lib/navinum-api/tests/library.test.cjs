@@ -519,3 +519,181 @@ test('points d’entrée par module (package.json exports) : chargeables seuls',
     const { erreurs } = await import(path.join(__dirname, '..', pkg.exports['./erreurs']));
     assert.equal(erreurs.decrire(new TypeError('Failed to fetch')).code, 'RESEAU');
 });
+
+// --- Module multijoueur ------------------------------------------------------------------------
+
+/** Serveur de sessions simulé (un groupe), qui publie chaque changement sur Mercure. */
+function serveurPartie(groupe) {
+    const etat = { session: null, departs: [], refuserDemarrage: false };
+    const publier = () => FakeEventSource.instances
+        .filter((es) => !es.closed && es.topics.includes(`/navinum/sessions/${groupe}`))
+        .forEach((es) => es.emit({ type: 'session', session: JSON.parse(JSON.stringify(etat.session)) }));
+    const p = `/api/session/${groupe}`;
+    const routes = {
+        'GET /api/rfid_groupes': { status: 200, contentType: 'application/ld+json', body: { member: [] } },
+        'POST /api/rfid_groupes': (call) => ({ status: 201, contentType: 'application/ld+json', body: { id: 'g', nom: call.body.nom } }),
+        'POST /api/session/create': (call) => {
+            etat.session = { id: groupe, status: 'lobby', theme: null, maxPlayers: 8, players: [{ name: call.body.playerName, score: 0, isLeader: true }] };
+            publier();
+            return { status: 200, body: { session: etat.session } };
+        },
+        [`POST ${p}/join`]: (call) => {
+            if (!etat.session) return { status: 404, body: { error: 'Session non trouvée', code: 'SESSION_INTROUVABLE' } };
+            etat.session.players.push({ name: call.body.playerName, score: 0, isLeader: false });
+            publier();
+            return { status: 200, body: { session: etat.session } };
+        },
+        [`GET ${p}`]: () => (etat.session ? { status: 200, body: { session: etat.session } } : { status: 404, body: {} }),
+        [`POST ${p}/start`]: (call) => {
+            if (etat.refuserDemarrage) return { status: 403, body: { error: 'Seul le leader du groupe peut démarrer le quiz', code: 'NON_LEADER' } };
+            Object.assign(etat.session, { status: 'playing', theme: call.body.theme });
+            publier();
+            return { status: 200, body: { status: 'ok' } };
+        },
+        [`POST ${p}/score`]: (call) => {
+            etat.session.players.find((j) => j.name === call.body.playerName).score = call.body.score;
+            publier();
+            return { status: 200, body: { status: 'ok' } };
+        },
+        [`POST ${p}/leave`]: (call) => { etat.departs.push(call.body.playerName); return { status: 200, body: { status: 'ok' } }; },
+    };
+    return { etat, routes };
+}
+
+test('multijoueur : lobby, démarrage synchronisé, premier à l’objectif gagne pour tout le groupe', async () => {
+    const { etat, routes } = serveurPartie('Salle');
+    const apiA = makeApi(routes);
+    const apiB = new NavinumAPI({ baseURL: 'http://navinum.test', retryAttempts: 1, storage: null });
+    const objectif = (theme) => (theme === 'histoire' ? 3 : 10);
+    const alice = apiA.multijoueur.partie({ objectif });
+    const bob = apiB.multijoueur.partie({ objectif });
+    const etapesAlice = [];
+    alice.onChange((e, avant) => { if (e.etape !== avant.etape) etapesAlice.push(e.etape); });
+
+    await alice.rejoindre(' Salle ', 'Alice');
+    await bob.rejoindre('Salle', 'Bob');
+    assert.equal(fetch.calls.find((c) => c.method === 'POST' && c.path === '/api/rfid_groupes').body.nom, 'Salle', 'groupe créé');
+    assert.deepEqual(alice.etat().joueurs.map((j) => `${j.nom}${j.leader ? '*' : ''}`), ['Alice*', 'Bob'], 'Alice voit Bob arriver');
+    assert.equal(alice.etat().leader, true);
+    assert.equal(bob.etat().leader, false);
+    assert.equal(alice.etat().joueursMax, 8);
+
+    await assert.rejects(() => bob.demarrer('histoire'), (e) => NavinumAPI.erreurs.est(e, 'NON_LEADER'));
+    await alice.demarrer('histoire');
+    assert.equal(bob.etat().etape, 'en_cours', 'Bob démarre avec Alice');
+    assert.equal(bob.etat().theme, 'histoire');
+    assert.equal(bob.etat().objectif, 3);
+
+    await alice.marquerPoint();
+    for (let i = 0; i < 3; i++) await bob.marquerPoint();
+    assert.equal(bob.etat().victoire, true);
+    assert.equal(alice.etat().etape, 'terminee', 'la partie se termine pour Alice');
+    assert.equal(alice.etat().gagnant, 'Bob');
+    assert.equal(alice.etat().victoire, false);
+    assert.deepEqual(alice.etat().joueurs.map((j) => j.score), [1, 3]);
+    assert.deepEqual(etapesAlice, ['lobby', 'en_cours', 'terminee']);
+
+    await alice.quitter();
+    assert.equal(alice.etat().etape, 'hors');
+    assert.deepEqual(etat.departs, ['Alice']);
+    assert.ok(FakeEventSource.instances.filter((es) => es.closed).length >= 1, 'abonnement fermé');
+});
+
+test('multijoueur : démarrage refusé → retour au lobby ; notre score jamais écrasé par un état plus ancien', async () => {
+    const { etat, routes } = serveurPartie('Duo');
+    const api = makeApi(routes);
+    const partie = api.multijoueur.partie({ objectif: 5 });
+    await partie.rejoindre('Duo', 'Léa');
+
+    etat.refuserDemarrage = true;
+    await assert.rejects(() => partie.demarrer('sciences'), (e) => NavinumAPI.erreurs.est(e, 'NON_LEADER'));
+    assert.equal(partie.etat().etape, 'lobby');
+
+    etat.refuserDemarrage = false;
+    await partie.demarrer('sciences');
+    await partie.marquerPoint();
+    await partie.marquerPoint();
+    // État relu, antérieur au dernier point
+    partie.recevoir({ status: 'playing', players: [{ name: 'Léa', score: 1, isLeader: true }] });
+    assert.equal(partie.etat().joueurs[0].score, 2);
+
+    partie.terminer();
+    assert.equal(partie.etat().etape, 'terminee');
+    assert.equal(partie.etat().gagnant, null);
+    await assert.rejects(() => partie.rejoindre('', 'Léa'), (e) => NavinumAPI.erreurs.est(e, 'VALIDATION'));
+});
+
+test('react : usePartie suit les changements d’état (React simulé)', async () => {
+    const { routes } = serveurPartie('R');
+    const api = makeApi(routes);
+    const partie = api.multijoueur.partie();
+    let valeur;
+    const nettoyages = [];
+    const ReactSimule = {
+        useState: (init) => { valeur = typeof init === 'function' ? init() : init; return [valeur, (v) => { valeur = v; }]; },
+        useEffect: (fn) => { const n = fn(); if (n) nettoyages.push(n); },
+    };
+    const { usePartie } = NavinumAPI.creerHooksReact(ReactSimule);
+    usePartie(partie);
+    assert.equal(valeur.etape, 'hors');
+    await partie.rejoindre('R', 'Zoé');
+    assert.equal(valeur.etape, 'lobby');
+    nettoyages.forEach((n) => n());
+    await partie.quitter();
+    assert.equal(valeur.etape, 'lobby', 'désabonné après nettoyage');
+});
+
+// Bug : seuls les 30 premiers groupes étaient listés (pagination API Platform) ; un groupe récent
+// n'apparaissait pas dans la liste du quiz, et findByNom pouvait le manquer (doublon refusé).
+test('rfidGroupes.list : toutes les pages sont lues', async () => {
+    const page = (n) => Array.from({ length: 30 }, (_, i) => ({ id: `${n}-${i}`, nom: `G${n}-${i}` }));
+    const api = makeApi({
+        'GET /api/rfid_groupes': (call) => (call.search.includes('page=2')
+            ? { status: 200, contentType: 'application/ld+json', body: { member: [{ id: 'x', nom: 'Classe 4B' }], view: {} } }
+            : { status: 200, contentType: 'application/ld+json', body: { member: page(1), view: { next: '/api/rfid_groupes?nom=Classe&page=2' } } }),
+    });
+    const groupes = await api.rfidGroupes.list({ nom: 'Classe' });
+    assert.equal(groupes.length, 31);
+    assert.equal(fetch.calls[1].search, '?nom=Classe&page=2', 'filtre conservé sur les pages suivantes');
+    assert.equal((await api.rfidGroupes.findByNom('Classe 4B')).id, 'x');
+});
+
+// Bug : un lien réutilisé par un autre joueur encore actif créditait le joueur précédent.
+test('gains : les événements portent le jeton du joueur ; lancement rattaché à un autre → rien de crédité', async () => {
+    const token = 'f'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: { id: 'autre' }, mercure: null } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 409, body: { error: 'Ce lancement est déjà rattaché à un autre visiteur', code: 'DEJA_RATTACHE' } },
+        [`POST /api/launch/${token}/events`]: (call) => (call.headers.Authorization === 'Bearer nvv2.bob'
+            ? { status: 202, body: { accepted: true, gamification: null, rattache: false } }
+            : { status: 202, body: { accepted: true, gamification: { xp: [{ points: 5 }], medailles: [], totalXp: 5 }, rattache: true } }),
+        'POST /api/visiteur/invite': { status: 201, body: { visiteur: { id: 'bob', pseudo: 'Bob' }, token: 'nvv2.bob', expiresAt: new Date(Date.now() + 1800e3).toISOString(), appareil: 'nva1.bob' } },
+    });
+    await api.launch(token);
+    assert.ok(await api.gamification.evenement('quiz.started', {}), 'sans joueur connecté : comportement inchangé');
+    assert.equal(fetch.calls.at(-1).headers.Authorization, undefined);
+
+    const bob = await api.auth.connecter({ pseudo: 'Bob' });
+    assert.equal(bob.rattache, false);
+    assert.equal(bob.motif, 'DEJA_RATTACHE', 'l’interactif peut prévenir le joueur');
+
+    assert.equal(await api.gamification.evenement('quiz.completed', { score: 3 }), null, 'gains non comptés');
+    assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv2.bob');
+    assert.equal(api.gamification.bilan().xp, 5, 'seuls les gains réels sont cumulés');
+});
+
+test('multijoueur.groupes : logique de nom dans le module ; api.rfidGroupes ne fait que les appels HTTP', async () => {
+    const api = makeApi({
+        'GET /api/rfid_groupes': { status: 200, contentType: 'application/ld+json', body: { member: [{ id: '1', nom: 'Classe 4B bis' }, { id: '2', nom: 'Classe 4B' }] } },
+        'POST /api/rfid_groupes': (call) => ({ status: 201, contentType: 'application/ld+json', body: { id: '3', nom: call.body.nom } }),
+    });
+    const { groupes } = api.multijoueur;
+    assert.equal((await groupes.trouver(' Classe 4B ')).id, '2', 'nom exact, espaces ignorés');
+    assert.equal((await groupes.trouverOuCreer('Classe 4B')).id, '2', 'existant : pas de création');
+    assert.deepEqual(await groupes.trouverOuCreer(' Duo '), { id: '3', nom: 'Duo' });
+    assert.equal(fetch.calls.filter((c) => c.method === 'POST').length, 1);
+    await assert.rejects(() => groupes.trouver('  '), NavinumAPI.ValidationError);
+    assert.equal((await groupes.lister()).length, 2);
+
+    assert.equal((await api.rfidGroupes.findOrCreate('Classe 4B')).id, '2', 'alias obsolète toujours fonctionnel');
+});

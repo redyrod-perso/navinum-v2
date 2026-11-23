@@ -207,4 +207,39 @@ class VisiteurSessionTest extends WebTestCase
         $this->assertSame(200, $this->call('POST', "/api/launch/$l/visiteur", token: $suivant['token'])['status']);
         $this->assertSame($suivant['visiteur']['id'], $this->call('GET', "/api/launch/$l")['body']['visiteur']['id']);
     }
+
+    /**
+     * Bug : un lien de lancement réutilisé par un autre joueur, alors que le précédent est encore actif, refuse
+     * le rattachement (409) ; les événements de la partie créditaient pourtant le joueur précédent.
+     */
+    public function testLesGainsNeVontJamaisAUnAutreJoueur(): void
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $quiz = (new Interactif())->setLibelle('Quiz partagé '.bin2hex(random_bytes(3)))
+            ->setGamification(['xp' => [['evenement' => 'quiz.completed', 'points' => '10']], 'medailles' => [], 'attribuables' => []]);
+        $launch = new LaunchToken($quiz);
+        $em->persist($quiz);
+        $em->persist($launch);
+        $em->flush();
+        $l = $launch->getToken();
+
+        $alice = $this->invite('Alice');
+        $this->call('POST', "/api/launch/$l/visiteur", token: $alice['token']);
+        $bob = $this->invite('Bob');
+        $this->assertSame(409, $this->call('POST', "/api/launch/$l/visiteur", token: $bob['token'])['status'], 'Alice encore active');
+
+        $partieDeBob = $this->call('POST', "/api/launch/$l/events", ['type' => 'quiz.completed', 'payload' => []], $bob['token']);
+        $this->assertSame(202, $partieDeBob['status'], 'l\'événement est accepté');
+        $this->assertFalse($partieDeBob['body']['rattache']);
+        $this->assertNull($partieDeBob['body']['gamification'], 'ni Bob ni Alice crédités');
+        $medaille = $this->call('POST', "/api/launch/$l/medailles", ['medaille' => 'X'], $bob['token']);
+        $this->assertSame([409, 'DEJA_RATTACHE'], [$medaille['status'], $medaille['body']['code']]);
+
+        $partieDAlice = $this->call('POST', "/api/launch/$l/events", ['type' => 'quiz.completed', 'payload' => []], $alice['token']);
+        $this->assertTrue($partieDAlice['body']['rattache']);
+        $this->assertSame(10, $partieDAlice['body']['gamification']['totalXp'], 'Alice : seulement sa propre partie');
+
+        // Sans jeton visiteur : lancement préparé par Navinum pour ce visiteur, crédité comme avant
+        $this->assertSame(20, $this->call('POST', "/api/launch/$l/events", ['type' => 'quiz.completed', 'payload' => []])['body']['gamification']['totalXp']);
+    }
 }

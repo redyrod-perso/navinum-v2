@@ -136,8 +136,11 @@ export class Auth {
                 await lancement.identify(joueur.token);
                 joueur.rattache = true;
             } catch (error) {
-                // Jamais bloquant : le joueur reste connecté, la partie n'est simplement pas rattachée
+                // Jamais bloquant : le joueur reste connecté, la partie n'est simplement pas rattachée.
+                // `motif` : code du module d'erreurs (ex. DEJA_RATTACHE : lien utilisé par un autre joueur
+                // encore actif ; ses gains ne seront alors pas comptés).
                 joueur.rattache = false;
+                joueur.motif = erreurs.decrire(error).code;
                 this.api.config.log('Rattachement de la partie impossible', error);
             }
         }

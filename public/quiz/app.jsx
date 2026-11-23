@@ -11,7 +11,9 @@ const api = new NavinumAPI({
 
 // Module d'erreurs de la librairie : code stable, titre, message, action conseillée (aucun affichage)
 const { erreurs } = NavinumAPI;
-const { NotFoundError } = NavinumAPI;
+
+// Couche React de la librairie : l'état d'une partie multijoueur suit le module (aucun design)
+const { usePartie } = NavinumAPI.creerHooksReact(React);
 
 // Toutes les erreurs d'API sont journalisées au même endroit
 api.onError(info => console.warn(`[Quiz] Erreur API ${info.code} :`, info.message));
@@ -130,8 +132,8 @@ function QuizApp() {
     const [config, setConfig] = useState(null);
     const [configError, setConfigError] = useState(null);
     const [timeLeft, setTimeLeft] = useState(0);
-    // Suivi de la partie en cours (score local, début, minuteur de passage à la question suivante)
-    const gameRef = useRef({ score: 0, startedAt: null, nextTimeout: null });
+    // Minuteur de passage à la question suivante
+    const gameRef = useRef({ nextTimeout: null });
     // Configuration reçue via Mercure, appliquée hors partie uniquement
     const [pendingConfig, setPendingConfig] = useState(null);
     const [configNotice, setConfigNotice] = useState(false);
@@ -139,21 +141,36 @@ function QuizApp() {
     const configRef = useRef(null);
     configRef.current = config;
 
-    const [stage, setStage] = useState('home'); // home, lobby, playing, finished
+    // Partie multijoueur (module de la librairie) : groupe, lobby, leader, démarrage, scores, gagnant, départs.
+    // Le quiz ne garde que l'affichage et ses questions. Objectif : toutes les questions du thème justes.
+    const partieRef = useRef(null);
+    if (!partieRef.current) {
+        partieRef.current = api.multijoueur.partie({
+            objectif: themeId => {
+                const c = configRef.current;
+                const theme = c && c.themes.find(t => t.id === themeId);
+                return theme ? Math.min(theme.questions.length, c.nbQuestions) : null;
+            }
+        });
+    }
+    const partie = partieRef.current;
+    const etat = usePartie(partie);
+    const stage = { hors: 'home', lobby: 'lobby', en_cours: 'playing', terminee: 'finished' }[etat.etape];
+    const sessionId = etat.groupe || '';
+    const players = etat.joueurs.map(j => ({ name: j.nom, score: j.score, isLeader: j.leader }));
+    const scores = Object.fromEntries(etat.joueurs.map(j => [j.nom, j.score]));
+    const winner = etat.gagnant;
+
     const [themes, setThemes] = useState([]);
     const [selectedTheme, setSelectedTheme] = useState(null);
     const [playerName, setPlayerName] = useState('');
     const [groupName, setGroupName] = useState('');
     const [existingGroups, setExistingGroups] = useState([]);
     const [groupMode, setGroupMode] = useState('select'); // 'select' ou 'create'
-    const [sessionId, setSessionId] = useState('');
-    const [players, setPlayers] = useState([]);
     const [questions, setQuestions] = useState([]);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [scores, setScores] = useState({});
     const [selectedAnswer, setSelectedAnswer] = useState(null);
     const [showResult, setShowResult] = useState(false);
-    const [winner, setWinner] = useState(null);
     const [notification, setNotification] = useState(null);
     // Erreur affichée (décrite par NavinumAPI.erreurs) et action « Réessayer » associée
     const [erreur, setErreur] = useState(null);
@@ -264,25 +281,28 @@ function QuizApp() {
     // Événements de début et de fin de partie (envoyés seulement avec un jeton)
     useEffect(() => {
         if (stage === 'playing') {
-            gameRef.current.startedAt = Date.now();
             track('quiz.started', {
-                theme: selectedTheme,
-                nbQuestions: questions.length,
+                theme: etat.theme,
+                nbQuestions: etat.objectif,
                 tempsParQuestion: config ? config.tempsParQuestion : null,
                 joueurs: players.length,
                 groupe: sessionId
             });
         } else if (stage === 'finished') {
-            const startedAt = gameRef.current.startedAt;
+            // Fin (y compris quand un autre joueur gagne) : plus de passage à la question suivante
+            if (gameRef.current.nextTimeout) {
+                clearTimeout(gameRef.current.nextTimeout);
+                gameRef.current.nextTimeout = null;
+            }
             setGains(null);
             track('quiz.completed', {
-                theme: selectedTheme,
-                score: gameRef.current.score,
-                total: questions.length,
-                gagnant: winner,
-                victoire: winner !== null && winner === playerName,
-                joueurs: players.length,
-                duree: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null
+                theme: etat.theme,
+                score: etat.score,
+                total: etat.objectif,
+                gagnant: etat.gagnant,
+                victoire: etat.victoire,
+                joueurs: etat.joueurs.length,
+                duree: etat.debut ? Math.round((Date.now() - etat.debut) / 1000) : null
             }).then(gains => {
                 setGains(gains);
                 // Borne : le joueur suivant ne doit pas jouer sous ce nom
@@ -293,7 +313,8 @@ function QuizApp() {
 
     // Compte à rebours par question (tempsParQuestion = 0 : pas de limite)
     useEffect(() => {
-        if (stage !== 'playing' || !config || config.tempsParQuestion <= 0 || showResult) {
+        // Pas de compte à rebours avant le chargement des questions (la partie démarre juste avant)
+        if (stage !== 'playing' || !config || config.tempsParQuestion <= 0 || showResult || questions.length === 0) {
             return;
         }
         if (timeLeft <= 0) {
@@ -302,11 +323,11 @@ function QuizApp() {
         }
         const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
         return () => clearTimeout(timer);
-    }, [stage, timeLeft, showResult, currentQuestionIndex]);
+    }, [stage, timeLeft, showResult, currentQuestionIndex, questions]);
 
     // Charger les groupes existants (via la librairie Navinum)
     const loadGroups = () => {
-        api.rfidGroupes.list()
+        api.multijoueur.groupes.lister()
             .then(groupes => setExistingGroups(groupes))
             .catch(err => {
                 setExistingGroups([]);
@@ -326,83 +347,24 @@ function QuizApp() {
         if (stage !== 'home') {
             return;
         }
-        return api.rfidGroupes.onCreated(groupe => {
+        return api.multijoueur.groupes.onCree(groupe => {
             console.log('Nouveau groupe créé:', groupe.nom);
             loadGroups();
         });
     }, [stage]);
 
-    // Session en temps réel (Mercure) : la librairie relit l'état à chaque (re)connexion
-    // puis transmet chaque changement (joueurs, démarrage, scores).
-    // Suivi aussi après la fin : le tableau final reçoit les scores des joueurs qui finissent après nous.
+    // Démarrage de la partie (par nous ou par le leader) : charger les questions du thème
     useEffect(() => {
-        if (!sessionId || !['lobby', 'playing', 'finished'].includes(stage)) {
-            return;
-        }
-        console.log(`[Session] Suivi en temps réel de ${sessionId}`);
-
-        return api.sessions.subscribe(sessionId, session => {
-            const sessionPlayers = session.players || [];
-            // Après la fin, les joueurs partis restent affichés avec leur score
-            if (stage !== 'finished') setPlayers(sessionPlayers);
-
-            // Le leader a démarré le quiz
-            if (stage === 'lobby' && session.status === 'playing' && session.theme) {
-                console.log(`[Session] Quiz démarré ! Thème : ${session.theme}`);
-                loadQuestionsAndStart(session.theme);
-            }
-
-            // Scores en direct (fusion : un joueur parti garde son dernier score)
-            if (stage !== 'lobby') {
-                setScores(prev => {
-                    const next = { ...prev };
-                    sessionPlayers.forEach(player => {
-                        // Notre score : jamais en dessous du score local (l'état relu peut précéder
-                        // l'enregistrement de notre dernière bonne réponse)
-                        next[player.name] = player.name === playerName
-                            ? Math.max(gameRef.current.score, player.score || 0)
-                            : player.score;
-                    });
-                    return next;
-                });
-            }
-
-            // Un autre joueur a tout bon : il gagne, la partie se termine pour tout le groupe
-            // (après notre fin, on affiche seulement le gagnant)
-            if (stage === 'finished' && questions.length > 0) {
-                const gagnant = sessionPlayers.find(p => p.score >= questions.length);
-                if (gagnant) setWinner(prev => prev || gagnant.name);
-            }
-            if (stage === 'playing' && questions.length > 0) {
-                const gagnant = sessionPlayers.find(p => p.name !== playerName && p.score >= questions.length);
-                if (gagnant) {
-                    if (gameRef.current.nextTimeout) {
-                        clearTimeout(gameRef.current.nextTimeout);
-                        gameRef.current.nextTimeout = null;
-                    }
-                    setWinner(gagnant.name);
-                    setStage('finished');
-                }
-            }
-        }, { onError: err => console.warn('[Session] Relecture de l’état impossible :', erreurs.decrire(err).message) });
-    }, [sessionId, stage]);
-
-    // Page fermée ou rechargée dans le lobby ou en partie : quitter le groupe (pas de joueur fantôme)
-    useEffect(() => {
-        if (!sessionId || !playerName || (stage !== 'lobby' && stage !== 'playing')) {
-            return;
-        }
-        return api.sessions.quitterEnPartant(sessionId, { playerName });
-    }, [sessionId, playerName, stage]);
+        if (etat.etape === 'en_cours' && etat.theme) chargerQuestions(etat.theme);
+    }, [etat.etape, etat.theme]);
 
     const showNotification = (message) => {
         setNotification(message);
         setTimeout(() => setNotification(null), 3000);
     };
 
-    const loadQuestionsAndStart = (themeId) => {
-        // Les questions viennent de la configuration (ctx.config ou défauts du manifeste).
-        // configRef : ce callback est aussi appelé depuis le flux SSE, ouvert avant une mise à jour éventuelle
+    const chargerQuestions = (themeId) => {
+        // Les questions viennent de la configuration (ctx.config ou défauts du manifeste)
         const config = configRef.current;
         const theme = config && config.themes.find(t => t.id === themeId);
         if (!theme) {
@@ -418,17 +380,13 @@ function QuizApp() {
             correctIndex: q.correcte
         }));
 
-        gameRef.current.score = 0;
         setQuestions(questions);
         setCurrentQuestionIndex(0);
         setSelectedAnswer(null);
         setShowResult(false);
-        setWinner(null);
         setGains(null);
-        setScores({});
         setTimeLeft(config.tempsParQuestion);
         setSelectedTheme(themeId);
-        setStage('playing');
     };
 
     const joinGlobalSession = async () => {
@@ -449,29 +407,15 @@ function QuizApp() {
         setPlayerName(nom);
         try {
             // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
-            await identifyPlayer(nom, config.modeBorne);
+            const joueur = await identifyPlayer(nom, config.modeBorne);
 
-            // 1. Retrouver le groupe par son nom, ou le créer
-            await api.rfidGroupes.findOrCreate(groupe);
+            // Groupe retrouvé ou créé, lobby (le serveur impose le nombre maximum de joueurs du parcours)
+            await partie.rejoindre(groupe, nom);
 
-            // 2. Rejoindre la session du groupe, ou la créer. Le jeton de lancement permet au serveur
-            //    d'imposer le nombre maximum de joueurs du parcours (refus : GROUPE_COMPLET).
-            const launchToken = LAUNCH_TOKEN || undefined;
-            let data;
-            try {
-                data = await api.sessions.join(groupe, { playerName: nom, launchToken });
-            } catch (err) {
-                if (!(err instanceof NotFoundError)) throw err;
-                data = await api.sessions.create({ playerName: nom, sessionId: groupe, rfidGroupeName: groupe, launchToken });
+            // Lien de lancement déjà utilisé par un autre joueur encore actif : ses gains ne seront pas comptés
+            if (joueur && joueur.motif === 'DEJA_RATTACHE') {
+                afficherErreur(erreurs.creer('DEJA_RATTACHE', 'Vos XP et médailles ne seront pas comptés : ce lien est déjà utilisé par un autre joueur. Relancez le quiz depuis Navinum pour jouer à votre nom.'));
             }
-
-            if (!data.session || !data.session.players) {
-                throw erreurs.creer('SERVEUR', 'Réponse inattendue du serveur.');
-            }
-
-            setSessionId(groupe);
-            setPlayers(data.session.players);
-            setStage('lobby');
         } catch (err) {
             // Partie en cours, groupe complet (imposé par le serveur), réseau… : titre, message, « Réessayer »
             afficherErreur(err, joinGlobalSession);
@@ -488,17 +432,8 @@ function QuizApp() {
         fermerErreur();
         showNotification('Démarrage du quiz...');
 
-        // Le leader démarre tout de suite (il connaît le thème) ; les autres joueurs suivent via Mercure
-        loadQuestionsAndStart(selectedTheme);
-
-        api.sessions.start(sessionId, { theme: selectedTheme, playerName })
-            .catch(err => {
-                // Démarrage refusé (plus leader, partie déjà lancée…) : le leader revient au lobby, sauf
-                // si la partie a bien démarré (ex. réponse perdue puis nouvelle tentative)
-                if (erreurs.est(err, 'PARTIE_DEMARREE')) return;
-                setStage('lobby');
-                afficherErreur(err);
-            });
+        // Le leader démarre tout de suite ; les autres joueurs suivent. Refus : retour au lobby + message
+        partie.demarrer(selectedTheme).catch(err => afficherErreur(err));
     };
 
     // answerIndex = null : temps écoulé
@@ -506,6 +441,7 @@ function QuizApp() {
         if (showResult) return;
 
         const question = questions[currentQuestionIndex];
+        if (!question) return; // questions pas encore chargées
         const isCorrect = answerIndex !== null && answerIndex === question.correctIndex;
 
         setSelectedAnswer(answerIndex);
@@ -520,22 +456,9 @@ function QuizApp() {
         });
 
         if (isCorrect) {
-            const newScore = gameRef.current.score + 1;
-            gameRef.current.score = newScore;
-            setScores(prev => ({ ...prev, [playerName]: newScore }));
-
-            // Mettre à jour le score côté serveur
-            api.sessions.updateScore(sessionId, {
-                playerName: playerName,
-                score: newScore
-            }).catch(err => console.error('Erreur mise à jour score:', err));
-
-            // Vérifier si le joueur a fini
-            if (newScore >= questions.length) {
-                setWinner(playerName);
-                setStage('finished');
-                return;
-            }
+            // +1 (envoyé au serveur) ; atteindre l'objectif fait gagner la partie
+            partie.marquerPoint();
+            if (partie.etat().etape === 'terminee') return;
         }
 
         // Passer à la question suivante après 2 secondes
@@ -548,7 +471,7 @@ function QuizApp() {
                 setCurrentQuestionIndex(currentQuestionIndex + 1);
             } else {
                 // Toutes les questions sont posées mais pas toutes correctes
-                setStage('finished');
+                partie.terminer();
             }
         }, 2000);
     };
@@ -561,24 +484,13 @@ function QuizApp() {
         if (stage === 'playing') {
             track('quiz.abandoned', {
                 theme: selectedTheme,
-                score: gameRef.current.score,
+                score: etat.score,
                 questionIndex: currentQuestionIndex,
                 total: questions.length
             });
         }
-        gameRef.current.score = 0;
-        gameRef.current.startedAt = null;
-
-        if (sessionId && playerName) {
-            try {
-                await api.sessions.leave(sessionId, { playerName: playerName });
-            } catch (err) {
-                console.error('Erreur déconnexion:', err);
-            }
-        }
-
-        // Réinitialiser l'état
-        setStage('home');
+        // Quitter le groupe (module multijoueur) : retour à l'accueil
+        await partie.quitter();
         setSelectedTheme(null);
         if (config && config.modeBorne) {
             // Borne : déconnexion (aussi en cours de partie) et champ vide pour le joueur suivant
@@ -590,14 +502,10 @@ function QuizApp() {
             setPlayerName(visiteur && visiteur.pseudo ? visiteur.pseudo : '');
         }
         setGroupName('');
-        setSessionId('');
-        setPlayers([]);
         setQuestions([]);
         setCurrentQuestionIndex(0);
-        setScores({});
         setSelectedAnswer(null);
         setShowResult(false);
-        setWinner(null);
         setGains(null);
     };
 
@@ -766,7 +674,7 @@ function QuizApp() {
                 {bandeauErreur}
 
                 <div className="lobby-players">
-                    <h2>Joueurs connectés ({players.length}/{config.joueursMax})</h2>
+                    <h2>Joueurs connectés ({players.length}/{etat.joueursMax || config.joueursMax})</h2>
                     <ul className="players-list">
                         {players.map(player => (
                             <li key={player.name} className="player-item">
@@ -833,6 +741,15 @@ function QuizApp() {
 
     if (stage === 'playing') {
         const question = questions[currentQuestionIndex];
+        // La partie démarre (état du module) juste avant que les questions du thème soient chargées
+        if (!question) {
+            return (
+                <div className="quiz-container">
+                    <h1>🎯 Quiz - {themeLabel(etat.theme)}</h1>
+                    <p style={{ textAlign: 'center', color: '#666' }}>Démarrage…</p>
+                </div>
+            );
+        }
         const myScore = scores[playerName] || 0;
         const progress = (myScore / questions.length) * 100;
 

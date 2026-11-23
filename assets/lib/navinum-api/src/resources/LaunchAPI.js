@@ -187,14 +187,25 @@ export class LaunchAPI {
      * @example
      * await api.launches.sendEvent('abc123', 'quiz.completed', { score: 8, total: 10 });
      */
-    async sendEvent(token, type, payload = {}) {
+    async sendEvent(token, type, payload = {}, options = {}) {
         if (!type || typeof type !== 'string') {
             throw new ValidationError("Type d'événement manquant", { type: 'requis' });
         }
         return this.client.post(`${this.tokenPath(token)}/events`, {
             type,
             payload: payload || {}
-        });
+        }, LaunchAPI.bearer(options.visiteurToken));
+    }
+
+    /**
+     * En-tête du joueur qui joue : le serveur ne crédite les gains qu'au joueur rattaché au lancement
+     * (réponse `rattache: false` sinon, et personne n'est crédité).
+     * @param {string|null|undefined} visiteurToken
+     * @returns {Object}
+     * @private
+     */
+    static bearer(visiteurToken) {
+        return visiteurToken ? { headers: { Authorization: `Bearer ${visiteurToken}` } } : {};
     }
 
     /**
@@ -240,12 +251,12 @@ export class LaunchAPI {
      * const { medaille, nouvelle } = await ctx.demanderMedaille('Explorateur');
      * if (nouvelle) feliciter(medaille.libelle);
      */
-    async demanderMedaille(token, medaille) {
+    async demanderMedaille(token, medaille, options = {}) {
         const libelle = typeof medaille === 'string' ? medaille.trim() : '';
         if (!libelle) {
             throw new ValidationError('Libellé de médaille manquant', { medaille: 'requis' });
         }
-        return this.client.post(`${this.tokenPath(token)}/medailles`, { medaille: libelle });
+        return this.client.post(`${this.tokenPath(token)}/medailles`, { medaille: libelle }, LaunchAPI.bearer(options.visiteurToken));
     }
 
     /**
@@ -262,7 +273,9 @@ export class LaunchAPI {
      * const ctx = await api.launches.resolve();
      * if (ctx) await ctx.track('quiz.started', {});
      */
-    async resolve(token) {
+    async resolve(token, options = {}) {
+        // Jeton du joueur qui joue (module auth), joint aux événements et aux médailles demandées
+        const jetonJoueur = typeof options.jetonJoueur === 'function' ? options.jetonJoueur : () => null;
         const effectiveToken = token || LaunchAPI.getTokenFromUrl();
         if (!effectiveToken) {
             return null;
@@ -279,13 +292,13 @@ export class LaunchAPI {
             visiteur: data?.visiteur ?? null,
             expiresAt: data?.expiresAt ?? null,
             mercure: data?.mercure ?? null,
-            track: (type, payload = {}) => this.sendEvent(effectiveToken, type, payload),
+            track: (type, payload = {}) => this.sendEvent(effectiveToken, type, payload, { visiteurToken: jetonJoueur() }),
             onConfigChange: (callback) => LaunchAPI.subscribeConfig(
                 data?.mercure ?? null,
                 callback,
                 { log: (...args) => this.client.config.log(...args) }
             ),
-            demanderMedaille: (medaille) => this.demanderMedaille(effectiveToken, medaille),
+            demanderMedaille: (medaille) => this.demanderMedaille(effectiveToken, medaille, { visiteurToken: jetonJoueur() }),
             identify: async (visiteurToken) => {
                 const updated = await this.identify(effectiveToken, visiteurToken);
                 ctx.visiteur = updated?.visiteur ?? null;

@@ -15,14 +15,15 @@ const LD_JSON = { 'Content-Type': 'application/ld+json', Accept: 'application/ld
  */
 
 /**
- * Groupes de visiteurs (`/api/rfid_groupes`, API Platform).
+ * Appels HTTP des groupes de visiteurs (`/api/rfid_groupes`, API Platform), sans logique de jeu.
  *
- * Lecture et création publiques ; modification et suppression réservées à l'admin.
+ * Lecture et création publiques ; modification et suppression réservées à l'admin. Pour les jeux,
+ * utiliser le module multijoueur : `api.multijoueur.groupes` (retrouver un groupe par son nom ou le créer).
  *
  * @class
  * @example
  * const groupes = await api.rfidGroupes.list();
- * const groupe = await api.rfidGroupes.findByNom('Classe 4B') ?? await api.rfidGroupes.create('Classe 4B');
+ * const cree = await api.rfidGroupes.create('Classe 4B');
  * const stop = api.rfidGroupes.onCreated(g => console.log('Nouveau groupe', g.nom));
  */
 export class RfidGroupeAPI {
@@ -35,28 +36,24 @@ export class RfidGroupeAPI {
     }
 
     /**
-     * Liste des groupes (première page, 30 groupes).
+     * Liste de **tous** les groupes : les pages de l'API (30 groupes chacune) sont toutes lues.
      *
      * @param {Object} [params={}] - Filtres API Platform (ex. `{ nom: 'Classe' }`, recherche partielle)
      * @returns {Promise<RfidGroupe[]>}
      * @throws {NetworkError} En cas d'erreur réseau
      */
     async list(params = {}) {
-        const data = await this.client.get(this.basePath, { params, headers: LD_JSON });
-        const members = data && (data.member || data['hydra:member']);
-        return Array.isArray(members) ? members : [];
-    }
-
-    /**
-     * Cherche un groupe par son nom exact.
-     *
-     * @param {string} nom - Nom du groupe
-     * @returns {Promise<RfidGroupe|null>} Le groupe, ou null s'il n'existe pas
-     */
-    async findByNom(nom) {
-        const value = RfidGroupeAPI.normalizeNom(nom);
-        const groupes = await this.list({ nom: value });
-        return groupes.find(g => g.nom === value) || null;
+        const groupes = [];
+        let data = await this.client.get(this.basePath, { params, headers: LD_JSON });
+        for (let page = 1; ; page++) {
+            const members = data && (data.member || data['hydra:member']);
+            if (Array.isArray(members)) groupes.push(...members);
+            const view = data && (data.view || data['hydra:view']);
+            const suivante = view && (view.next || view['hydra:next']);
+            if (!suivante || page >= RfidGroupeAPI.PAGES_MAX) break;
+            data = await this.client.get(suivante, { headers: LD_JSON });
+        }
+        return groupes;
     }
 
     /**
@@ -71,13 +68,21 @@ export class RfidGroupeAPI {
     }
 
     /**
-     * Retourne le groupe portant ce nom, en le créant s'il n'existe pas.
-     *
-     * @param {string} nom - Nom du groupe
+     * @deprecated Depuis 0.10.0 : utiliser `api.multijoueur.groupes.trouver(nom)`.
+     * @param {string} nom
+     * @returns {Promise<RfidGroupe|null>}
+     */
+    async findByNom(nom) {
+        return this.groupes.trouver(nom);
+    }
+
+    /**
+     * @deprecated Depuis 0.10.0 : utiliser `api.multijoueur.groupes.trouverOuCreer(nom)`.
+     * @param {string} nom
      * @returns {Promise<RfidGroupe>}
      */
     async findOrCreate(nom) {
-        return (await this.findByNom(nom)) || this.create(nom);
+        return this.groupes.trouverOuCreer(nom);
     }
 
     /**
@@ -109,5 +114,8 @@ export class RfidGroupeAPI {
         return value;
     }
 }
+
+/** Garde-fou : nombre maximum de pages lues (30 groupes par page). */
+RfidGroupeAPI.PAGES_MAX = 50;
 
 export default RfidGroupeAPI;

@@ -47,6 +47,11 @@ export class Gamification {
         }
         try {
             const res = await ctx.track(type, payload);
+            if (res && res.rattache === false) {
+                // Lancement rattaché à un autre joueur : personne n'est crédité (voir api.auth, joueur.motif)
+                this.api.config.log(`Événement ${type} : gains non comptés (lancement rattaché à un autre joueur)`);
+                return null;
+            }
             return this.enregistrer(res && res.gamification ? res.gamification : null);
         } catch (error) {
             this.api.config.log(`Événement ${type} non envoyé`, error);

@@ -56,7 +56,8 @@ assets/lib/navinum-api/
 ├── src/
 │   ├── core/              # Socle (ApiClient, Config, Errors, Realtime)
 │   ├── resources/         # Appels HTTP par ressource du serveur (Session, Visiteur…), sans logique
-│   ├── modules/           # Modules réutilisables sans HTML : erreurs/, auth/, gamification/ (multijoueur/ à venir)
+│   ├── modules/           # Modules réutilisables sans HTML : erreurs/, auth/, gamification/, multijoueur/
+│   ├── react/             # Hooks React facultatifs (NavinumAPI.creerHooksReact(React))
 │   └── index.js           # Point d'entrée
 ├── dist/                  # Builds générés (dev + prod)
 ├── README.md              # Documentation complète
@@ -322,6 +323,10 @@ api.interactifs.chargerManifeste()   // { manifest, defaults }
 // Modules réutilisables (sans HTML ni design ; points d'entrée @navinum/api/erreurs|auth|gamification)
 api.gamification.evenement(type, payload)  // gains { xp, medailles, totalXp } ou null, jamais bloquant
 api.gamification.onGains(cb) / demanderMedaille() / bilan()
+api.multijoueur.partie({ objectif })      // rejoindre(), demarrer(), marquerPoint(), terminer(), quitter(), onChange()
+api.multijoueur.groupes                   // lister(), onCree(), trouver(), trouverOuCreer()
+// Règle : resources/ = appels HTTP seulement ; toute logique (session, groupes par nom…) dans modules/
+NavinumAPI.creerHooksReact(React)         // usePartie, useJoueur, useGains (hooks facultatifs)
 api.auth.connecter({ pseudo })       // joueur + jeton visiteur, partie lancée rattachée automatiquement
 api.auth.joueur() / deconnecter()
 NavinumAPI.erreurs.decrire(err)      // { code, titre, message, reessayable, action, … } — aucun affichage
@@ -412,8 +417,9 @@ l'action conseillée. Côté Symfony, toute réponse d'erreur d'API destinée au
 
 **Technologies:** React 18 + Navinum API Client
 
-**Fonctionnalités:**
-- Lobby multi-joueurs avec polling temps réel
+**Fonctionnalités:** (logique dans les modules de la librairie — `api.multijoueur`, `api.auth`, `api.gamification` ;
+`app.jsx` ne contient que l'affichage et les questions : c'est l'exemple de référence pour un nouvel interactif)
+- Lobby multi-joueurs en temps réel (Mercure)
 - Sélection de thème
 - Questions à choix multiples
 - Scores en temps réel
@@ -471,7 +477,9 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
   dans `VISITEUR_SECRET_PRECEDENT` (facultative) au moins 30 min.
 - **Borne partagée** : `modeBorne` dans la configuration du placement (quiz : déconnexion en fin de partie, rien de
   conservé sur l'appareil). Un nouveau joueur reprend le lancement si le précédent n'est plus actif, et **toujours** en
-  mode borne (le joueur parti sans se déconnecter ne reçoit pas les gains des suivants).
+  mode borne (le joueur parti sans se déconnecter ne reçoit pas les gains des suivants). Les gains ne vont qu'au
+  joueur qui joue : la librairie joint son jeton (Bearer) aux événements et médailles demandées ; s'il ne désigne pas
+  le visiteur rattaché au lancement, personne n'est crédité (`rattache: false`).
 - `POST /api/launch/{jeton}/visiteur` (Bearer) rattache le visiteur au lancement : ses événements alimentent son `LogVisite`.
 - Côté JS (lib 0.6.0) : **module `api.auth`** — `api.auth.connecter({ pseudo })` (mode invité ; `compte`, `oauth`,
   `rfid` à venir derrière la même API) rattache aussi la partie lancée. En dessous : `api.visiteurs.identifier(pseudo)` (visiteur conservé sur l'appareil, clé `navinum.visiteur`,

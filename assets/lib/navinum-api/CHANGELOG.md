@@ -7,6 +7,38 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.10.0] - 2026-11-24
+
+Modules réutilisables, partie 2 (#53).
+
+### Added
+- **Module multijoueur** `api.multijoueur` : `partie({ objectif })` → `rejoindre()`, `demarrer()`, `marquerPoint()`,
+  `terminer()`, `quitter()`, `etat()`, `onChange()` ; `api.multijoueur.groupes` (`lister()`, `trouver()`,
+  `trouverOuCreer()`, `onCree()`). Logique extraite du quiz
+  (lobby, leader, démarrage synchronisé, scores en direct, premier à l'objectif gagnant, départ à la fermeture).
+- **Couche React facultative** : `NavinumAPI.creerHooksReact(React)` → `usePartie`, `useJoueur`, `useGains`.
+- Points d'entrée `@navinum/api/multijoueur` et `@navinum/api/react`.
+
+### Changed
+- `resources/RfidGroupeAPI.js` ne fait plus que les appels HTTP (`list`, `create`, `onCreated`) ; la recherche par
+  nom et la création à la demande passent dans le module multijoueur (`api.multijoueur.groupes`).
+
+### Deprecated
+- `api.rfidGroupes.findByNom()` et `findOrCreate()` : utiliser `api.multijoueur.groupes.trouver()` et
+  `trouverOuCreer()`.
+
+### Fixed
+- Un lien de lancement réutilisé par un autre joueur, alors que le précédent était encore actif, créditait le
+  joueur précédent. Les événements et médailles demandées portent désormais le jeton du joueur connecté
+  (`Authorization`) ; le serveur ne crédite que le joueur rattaché (sinon `rattache: false`, personne n'est crédité,
+  `api.gamification.evenement()` rend `null`). `api.auth.connecter()` indique `rattache: false` et
+  `motif: 'DEJA_RATTACHE'` pour que l'interactif prévienne le joueur.
+- `rfidGroupes.list()` ne rendait que les 30 premiers groupes (pagination API Platform) : un groupe récent
+  n'apparaissait pas dans les listes, et `findByNom()` / `findOrCreate()` pouvaient le manquer. Toutes les pages
+  sont désormais lues.
+
+---
+
 ## [0.9.0] - 2026-11-24
 
 Modules réutilisables, partie 1 (#53).

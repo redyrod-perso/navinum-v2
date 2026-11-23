@@ -93,10 +93,12 @@ final class LaunchController extends AbstractController
 
         $log = $this->launch->recordEvent($launchToken, $type, $payload);
 
-        // Gamification : XP et médailles selon les règles de l'interactif (null sans visiteur identifié)
+        // Gamification : XP et médailles selon les règles de l'interactif (null sans visiteur identifié),
+        // jamais au profit d'un autre joueur que celui qui joue
+        $rattache = $this->joueurRattache($launchToken, $request);
         $gamification = $this->gamification->apply(
             $launchToken->getInteractif(),
-            $launchToken->getVisiteur(),
+            $rattache ? $launchToken->getVisiteur() : null,
             $type,
             $payload,
             'launch:'.substr($launchToken->getToken(), 0, 16),
@@ -106,6 +108,7 @@ final class LaunchController extends AbstractController
             'accepted' => true,
             'logVisite' => (string) $log->getId(),
             'gamification' => $gamification,
+            'rattache' => $rattache,
         ], 202);
     }
 
@@ -124,6 +127,9 @@ final class LaunchController extends AbstractController
         $visiteur = $launchToken->getVisiteur();
         if (null === $visiteur) {
             return $this->json(['error' => 'Identifiez le joueur avant de lui attribuer une médaille', 'code' => 'NON_IDENTIFIE'], 401);
+        }
+        if (!$this->joueurRattache($launchToken, $request)) {
+            return $this->json(['error' => 'Ce lancement est rattaché à un autre joueur : la médaille ne peut pas vous être attribuée', 'code' => 'DEJA_RATTACHE'], 409);
         }
         $body = json_decode($request->getContent(), true);
         $libelle = \is_array($body) && \is_string($body['medaille'] ?? null) ? trim($body['medaille']) : '';
@@ -146,6 +152,23 @@ final class LaunchController extends AbstractController
         $this->launch->recordEvent($launchToken, 'navinum.medaille', ['medaille' => $libelle, 'nouvelle' => $result['nouvelle']]);
 
         return $this->json($result);
+    }
+
+    /**
+     * Les gains vont-ils bien au joueur qui joue ? Si la requête porte un jeton visiteur (Bearer), il doit
+     * désigner le visiteur rattaché au lancement : sinon (lien réutilisé par un autre joueur alors que le
+     * précédent est encore actif), personne n'est crédité. Sans jeton : le visiteur rattaché (lancement
+     * préparé par Navinum pour ce visiteur).
+     */
+    private function joueurRattache(LaunchToken $launchToken, Request $request): bool
+    {
+        if (null === VisiteurToken::bearer($request)) {
+            return true;
+        }
+        $joueur = $this->visiteurTokens->fromRequest($request);
+        $visiteur = $launchToken->getVisiteur();
+
+        return null !== $joueur && null !== $visiteur && $joueur->getId()->equals($visiteur->getId());
     }
 
     private function tokenError(?LaunchToken $token): ?JsonResponse

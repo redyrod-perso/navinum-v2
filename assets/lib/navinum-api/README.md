@@ -692,7 +692,8 @@ n'en est qu'un exemple) :
 | erreurs | `NavinumAPI.erreurs` | codes stables, messages, actions conseillées |
 | auth | `api.auth` | identification, sessions (30 min / 12 h), reprise sur l'appareil, mode borne |
 | gamification | `api.gamification` | événements de la partie, XP et médailles gagnés, médaille demandée |
-| multijoueur | *à venir (#53, partie 2)* | groupe, lobby, leader, scores en direct, gagnant |
+| multijoueur | `api.multijoueur` | groupe, lobby, leader, démarrage synchronisé, scores en direct, gagnant, départs |
+| React *(facultatif)* | `NavinumAPI.creerHooksReact(React)` | hooks `usePartie`, `useJoueur`, `useGains` (logique, pas de design) |
 
 **Interactif HTML** : un seul fichier, tous les modules — `<script src="/build/navinum-api.js"></script>`.
 
@@ -703,6 +704,8 @@ import NavinumAPI from '@navinum/api';
 import { erreurs } from '@navinum/api/erreurs';           // utilisable seul, sans instance
 import { Auth } from '@navinum/api/auth';                 // classes, pour composer ou étendre
 import { Gamification } from '@navinum/api/gamification';
+import { Partie } from '@navinum/api/multijoueur';
+import { creerHooks } from '@navinum/api/react';
 ```
 
 Pas de fichier `<script>` par module : chacun embarquerait le socle (code chargé plusieurs fois, versions
@@ -770,6 +773,50 @@ api.gamification.bilan();                            // { xp, medailles, totalXp
 - `evenement()` est **jamais bloquant** : en mode autonome (sans `?nv=`), sans joueur identifié ou en cas d'erreur
   réseau, il rend `null` et le jeu continue. Chaque appel prolonge aussi la session du joueur.
 - `demanderMedaille()` lève les refus (`MEDAILLE_NON_ATTRIBUABLE`, `NON_IDENTIFIE`…, voir le module d'erreurs).
+
+## Multijoueur
+
+Module `api.multijoueur`, sans affichage : tout ce qu'il faut pour un jeu à plusieurs dans un groupe. Règle par
+défaut : **le premier qui atteint l'objectif gagne**, et la partie se termine pour tout le groupe.
+
+```javascript
+const partie = api.multijoueur.partie({ objectif: theme => questions(theme).length }); // ou un nombre
+
+partie.onChange((etat, avant) => {
+    // etat : { etape: 'hors'|'lobby'|'en_cours'|'terminee', groupe, moi, joueurs: [{ nom, score, leader, moi }],
+    //          leader, joueursMax, theme, objectif, score, gagnant, victoire, debut }
+    if (avant.etape === 'lobby' && etat.etape === 'en_cours') afficherQuestions(etat.theme);
+    if (etat.etape === 'terminee') afficherPodium(etat.joueurs, etat.gagnant);
+});
+
+await partie.rejoindre('Classe 4B', 'Léa');     // groupe créé si besoin ; lobby (GROUPE_COMPLET, PARTIE_EN_COURS…)
+if (partie.etat().leader) await partie.demarrer('histoire'); // tous les joueurs démarrent ensemble
+await partie.marquerPoint();                    // bonne réponse : +1 (contrôlé par le serveur)
+partie.terminer();                              // fini sans atteindre l'objectif
+await partie.quitter();                         // aussi automatique à la fermeture de la page
+
+const { groupes } = api.multijoueur;
+await groupes.lister();                          // groupes existants (toutes les pages)
+groupes.onCree(g => …);                          // groupes créés en direct
+await groupes.trouverOuCreer('Classe 4B');       // par nom exact, créé s'il n'existe pas (fait par rejoindre())
+```
+
+- Le jeton de lancement (`api.launch()`) est transmis : le serveur impose le nombre maximum de joueurs du parcours.
+- Après la fin, les scores continuent d'arriver (joueurs qui finissent après nous) ; notre score n'est jamais écrasé
+  par un état plus ancien.
+
+### Avec React
+
+```javascript
+const { usePartie, useJoueur, useGains } = NavinumAPI.creerHooksReact(React);
+
+function Lobby({ partie }) {
+    const etat = usePartie(partie);   // re-rendu à chaque changement
+    return <ul>{etat.joueurs.map(j => <li key={j.nom}>{j.leader ? '👑' : '👤'} {j.nom}</li>)}</ul>;
+}
+```
+
+Exemple complet : le quiz (`public/quiz/app.jsx`), qui ne contient plus que son affichage et ses questions.
 
 ## Gestion des erreurs
 
@@ -1234,7 +1281,9 @@ navinum-api/
 │   ├── modules/                # Modules réutilisables (un dossier, un point d'entrée index.js)
 │   │   ├── erreurs/            # NavinumAPI.erreurs
 │   │   ├── auth/               # api.auth : Auth, ModeInvite (session), Stockage (appareil)
-│   │   └── gamification/       # api.gamification
+│   │   ├── gamification/       # api.gamification
+│   │   └── multijoueur/        # api.multijoueur (Partie)
+│   ├── react/                  # Hooks React facultatifs (NavinumAPI.creerHooksReact)
 │   ├── resources/              # Appels HTTP par ressource du serveur (sans logique)
 │   │   ├── BaseResource.js     # Classe de base (CRUD)
 │   │   ├── SessionAPI.js       # API Sessions
