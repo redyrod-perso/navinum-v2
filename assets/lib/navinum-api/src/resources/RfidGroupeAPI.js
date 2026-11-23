@@ -35,16 +35,24 @@ export class RfidGroupeAPI {
     }
 
     /**
-     * Liste des groupes (première page, 30 groupes).
+     * Liste de **tous** les groupes : les pages de l'API (30 groupes chacune) sont toutes lues.
      *
      * @param {Object} [params={}] - Filtres API Platform (ex. `{ nom: 'Classe' }`, recherche partielle)
      * @returns {Promise<RfidGroupe[]>}
      * @throws {NetworkError} En cas d'erreur réseau
      */
     async list(params = {}) {
-        const data = await this.client.get(this.basePath, { params, headers: LD_JSON });
-        const members = data && (data.member || data['hydra:member']);
-        return Array.isArray(members) ? members : [];
+        const groupes = [];
+        let data = await this.client.get(this.basePath, { params, headers: LD_JSON });
+        for (let page = 1; ; page++) {
+            const members = data && (data.member || data['hydra:member']);
+            if (Array.isArray(members)) groupes.push(...members);
+            const view = data && (data.view || data['hydra:view']);
+            const suivante = view && (view.next || view['hydra:next']);
+            if (!suivante || page >= RfidGroupeAPI.PAGES_MAX) break;
+            data = await this.client.get(suivante, { headers: LD_JSON });
+        }
+        return groupes;
     }
 
     /**
@@ -109,5 +117,8 @@ export class RfidGroupeAPI {
         return value;
     }
 }
+
+/** Garde-fou : nombre maximum de pages lues (30 groupes par page). */
+RfidGroupeAPI.PAGES_MAX = 50;
 
 export default RfidGroupeAPI;
