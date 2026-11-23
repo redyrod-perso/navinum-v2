@@ -458,8 +458,17 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
 
 ### Visiteurs et identification (prototype)
 
-- `POST /api/visiteur/invite` `{pseudo}` → visiteur invité + **jeton visiteur** `nvv1.<uuid>.<signature>` (HMAC avec
-  `APP_SECRET`, sans stockage, sans expiration pour l'instant). `GET /api/visiteur/moi` (Bearer) → profil.
+- `POST /api/visiteur/invite` `{pseudo}` → visiteur invité + **jeton visiteur** `nvv2.<données>.<signature>` (HMAC
+  avec `APP_SECRET`, sans stockage) + **secret d'appareil** `nva1.…` (empreinte en base : `VisiteurAppareil`).
+  `GET /api/visiteur/moi` (Bearer) → profil.
+- **Sessions (#6)** : jeton valable **30 min d'inactivité**, **12 h au plus** ; `POST /api/visiteur/renouveler` (Bearer)
+  le prolonge ; `POST /api/visiteur/reprendre` `{pseudo, appareil}` rend le **même profil** sur le même appareil
+  (ou `{pseudo, ancienJeton}` pour échanger un ancien `nvv1`) ; `POST /api/visiteur/deconnexion` révoque l'appareil ;
+  admin › Visiteurs › « Déconnecter partout » révoque tous ses appareils. Changement de `APP_SECRET` : mettre l'ancien
+  dans `VISITEUR_SECRET_PRECEDENT` (facultative) au moins 30 min.
+- **Borne partagée** : `modeBorne` dans la configuration du placement (quiz : déconnexion en fin de partie, rien de
+  conservé sur l'appareil). Un nouveau joueur reprend le lancement si le précédent n'est plus actif, et **toujours** en
+  mode borne (le joueur parti sans se déconnecter ne reçoit pas les gains des suivants).
 - `POST /api/launch/{jeton}/visiteur` (Bearer) rattache le visiteur au lancement : ses événements alimentent son `LogVisite`.
 - Côté JS (lib 0.6.0) : **module `api.auth`** — `api.auth.connecter({ pseudo })` (mode invité ; `compte`, `oauth`,
   `rfid` à venir derrière la même API) rattache aussi la partie lancée. En dessous : `api.visiteurs.identifier(pseudo)` (visiteur conservé sur l'appareil, clé `navinum.visiteur`,
@@ -555,9 +564,9 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 - **Module JS d'authentification partagé**, intégrable par n'importe quel interactif et distribué aux développeurs tiers.
 - Modes : compte en ligne (email + mot de passe), **OAuth** (Google et autres fournisseurs), **badge RFID** en réseau
   local et sur le matériel équipé.
-- Tous délivrent le même **jeton Bearer** visiteur (format actuel `nvv1.…`, à faire évoluer : expiration, révocation,
-  rafraîchissement). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
-- Prototype actuel : visiteur invité par pseudo (`POST /api/visiteur/invite`), conservé dans `localStorage`.
+- Tous délivrent le même **jeton Bearer** visiteur (format actuel `nvv2.…` : expiration, révocation et
+  rafraîchissement — faits en #6). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
+- Actuel : visiteur invité par pseudo, session de 30 min (12 h au plus), profil repris sur le même appareil (#6).
 
 ### Gamification (XP, médailles) — implémentée (#7)
 

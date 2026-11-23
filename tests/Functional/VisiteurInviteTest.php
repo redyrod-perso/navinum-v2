@@ -51,7 +51,7 @@ class VisiteurInviteTest extends WebTestCase
     public function testInviteEtProfil(): void
     {
         [$id, $token] = $this->invite('Alice');
-        $this->assertMatchesRegularExpression('/^nvv1\.[0-9a-f-]{36}\.[A-Za-z0-9_-]+$/', $token);
+        $this->assertMatchesRegularExpression('/^nvv2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/', $token);
 
         $this->client->request('GET', '/api/visiteur/moi', server: ['HTTP_AUTHORIZATION' => 'Bearer '.$token]);
         $this->assertResponseIsSuccessful();

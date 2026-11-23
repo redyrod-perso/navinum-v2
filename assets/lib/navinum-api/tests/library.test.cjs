@@ -137,41 +137,108 @@ test('sessions.subscribe : relit l’état à la connexion puis suit les mises �
 
 // --- Identification ----------------------------------------------------------------------------
 
-test('visiteurs.identifier : crée un invité, puis le réutilise pour le même pseudo', async () => {
-    let invites = 0;
-    const api = makeApi({
-        'POST /api/visiteur/invite': (call) => ({ status: 201, body: { visiteur: { id: `v${++invites}`, pseudo: call.body.pseudo, anonyme: true }, token: `nvv1.v${invites}.sig` } }),
+const dans = (minutes) => new Date(Date.now() + minutes * 60000).toISOString();
+
+/** Serveur visiteur simulé : invités, reprise par appareil, renouvellement, déconnexion. */
+function serveurVisiteurs() {
+    const etat = { invites: 0, appareils: new Map(), revoques: new Set(), reprises: 0, renouvellements: 0 };
+    const routes = {
+        'POST /api/visiteur/invite': (call) => {
+            const id = `v${++etat.invites}`;
+            etat.appareils.set(`nva1.${id}`, { id, pseudo: call.body.pseudo });
+            return { status: 201, body: { visiteur: { id, pseudo: call.body.pseudo, anonyme: true }, token: `nvv2.${id}.t0`, expiresAt: dans(30), appareil: `nva1.${id}` } };
+        },
+        'POST /api/visiteur/reprendre': (call) => {
+            const a = etat.appareils.get(call.body.appareil);
+            if (!a || a.pseudo !== call.body.pseudo || etat.revoques.has(call.body.appareil)) return { status: 401, body: { error: 'non reconnu', code: 'NON_IDENTIFIE' } };
+            etat.reprises++;
+            return { status: 200, body: { visiteur: { id: a.id, pseudo: a.pseudo, anonyme: true }, token: `nvv2.${a.id}.r${etat.reprises}`, expiresAt: dans(30) } };
+        },
+        'POST /api/visiteur/renouveler': () => ({ status: 200, body: { token: `nvv2.renouvele.${++etat.renouvellements}`, expiresAt: dans(30) } }),
+        'POST /api/visiteur/deconnexion': (call) => { etat.deconnecte = call.headers.Authorization; return { status: 204, body: '', contentType: 'text/plain' }; },
         'GET /api/visiteur/moi': { status: 200, body: { visiteur: { id: 'v1' } } },
-    });
+    };
+    return { etat, routes };
+}
+
+test('visiteurs.identifier : session valide réutilisée ; expirée → même profil repris sur l’appareil', async () => {
+    const { etat, routes } = serveurVisiteurs();
+    const api = makeApi(routes);
 
     const zoe = await api.visiteurs.identifier('Zoé');
     assert.equal(zoe.id, 'v1');
-    assert.equal(api.visiteurs.courant().token, 'nvv1.v1.sig');
+    assert.equal(zoe.appareil, 'nva1.v1');
+    assert.equal((await api.visiteurs.identifier(' Zoé ')).token, 'nvv2.v1.t0', 'session encore valide');
+    assert.equal(fetch.calls.at(-1).path, '/api/visiteur/moi');
 
-    const encore = await api.visiteurs.identifier(' Zoé ');
-    assert.equal(encore.id, 'v1', 'même visiteur réutilisé');
-    assert.equal(invites, 1);
-    assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv1.v1.sig');
+    // 30 min d'inactivité : jeton expiré → reprise, même visiteur
+    api.client.config.storage.setItem('navinum.visiteur', JSON.stringify({ ...api.visiteurs.courant(), expiresAt: dans(-1) }));
+    const reprise = await api.visiteurs.identifier('Zoé');
+    assert.equal(reprise.id, 'v1', 'même profil (XP, médailles)');
+    assert.equal(reprise.token, 'nvv2.v1.r1');
+    assert.equal(reprise.appareil, 'nva1.v1', 'secret d’appareil conservé');
+    assert.deepEqual(fetch.calls.at(-1).body, { pseudo: 'Zoé', appareil: 'nva1.v1' });
+    assert.equal(etat.invites, 1);
 
-    const autre = await api.visiteurs.identifier('Tom');
-    assert.equal(autre.id, 'v2', 'autre pseudo : nouvel invité');
-
-    api.visiteurs.oublier();
-    assert.equal(api.visiteurs.courant(), null);
+    // Autre pseudo : nouvel invité
+    assert.equal((await api.visiteurs.identifier('Tom')).id, 'v2');
 });
 
-test('visiteurs.identifier : jeton invalide → nouvel invité ; API injoignable → visiteur conservé', async () => {
-    let invites = 0;
-    let moi = { status: 401, body: { error: 'Jeton visiteur absent ou invalide' } };
-    const api = makeApi({
-        'POST /api/visiteur/invite': (call) => ({ status: 201, body: { visiteur: { id: `v${++invites}`, pseudo: call.body.pseudo, anonyme: true }, token: `t${invites}` } }),
-        'GET /api/visiteur/moi': () => moi,
-    });
+test('visiteurs.identifier : appareil révoqué → nouvel invité ; ancien jeton nvv1 échangé ; hors ligne → conservé', async () => {
+    const { etat, routes } = serveurVisiteurs();
+    const api = makeApi(routes);
     await api.visiteurs.identifier('Léa');
-    assert.equal((await api.visiteurs.identifier('Léa')).id, 'v2', 'jeton refusé (401) : réinvité');
+    etat.revoques.add('nva1.v1');
+    api.client.config.storage.setItem('navinum.visiteur', JSON.stringify({ ...api.visiteurs.courant(), expiresAt: dans(-1) }));
+    assert.equal((await api.visiteurs.identifier('Léa')).id, 'v2', 'déconnecté partout : nouveau visiteur');
 
-    moi = { throw: new TypeError('Failed to fetch') };
-    assert.equal((await api.visiteurs.identifier('Léa')).id, 'v2', 'hors ligne : on garde le visiteur connu');
+    routes['POST /api/visiteur/reprendre'] = (call) => ({ status: 200, body: { visiteur: { id: 'ancien', pseudo: call.body.pseudo }, token: 'nvv2.ancien.x', expiresAt: dans(30), appareil: 'nva1.ancien' } });
+    api.client.config.storage.setItem('navinum.visiteur', JSON.stringify({ id: 'ancien', pseudo: 'Léa', token: 'nvv1.ancien.sig' }));
+    const migre = await api.visiteurs.identifier('Léa');
+    assert.deepEqual(fetch.calls.at(-1).body, { pseudo: 'Léa', ancienJeton: 'nvv1.ancien.sig' });
+    assert.equal(migre.appareil, 'nva1.ancien');
+
+    routes['GET /api/visiteur/moi'] = { throw: new TypeError('Failed to fetch') };
+    assert.equal((await api.visiteurs.identifier('Léa')).id, 'ancien', 'hors ligne : on garde le visiteur connu');
+});
+
+test('auth : la session est prolongée par l’activité de la partie (ctx.track)', async () => {
+    const { etat, routes } = serveurVisiteurs();
+    const token = 'd'.repeat(48);
+    routes[`GET /api/launch/${token}`] = { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } };
+    routes[`POST /api/launch/${token}/visiteur`] = { status: 200, body: { visiteur: { id: 'v1' } } };
+    routes[`POST /api/launch/${token}/events`] = { status: 202, body: { accepted: true } };
+    const api = makeApi(routes);
+    const ctx = await api.launch(token);
+    await api.auth.connecter({ pseudo: 'Léa' });
+
+    await ctx.track('quiz.started', {});
+    await flush();
+    assert.equal(etat.renouvellements, 0, 'jeton récent : pas de renouvellement');
+
+    api.auth.joueurCourant.expiresAt = dans(10); // il reste 10 min
+    await ctx.track('quiz.answered', {});
+    await flush(); await flush();
+    assert.equal(etat.renouvellements, 1);
+    assert.equal(api.auth.joueur().token, 'nvv2.renouvele.1');
+    assert.equal(api.visiteurs.courant().token, 'nvv2.renouvele.1', 'conservé sur l’appareil');
+});
+
+test('auth : mode borne (memoriser: false) et déconnexion côté serveur', async () => {
+    const { etat, routes } = serveurVisiteurs();
+    const api = makeApi(routes);
+    const joueur = await api.auth.connecter({ pseudo: 'Borne', memoriser: false });
+    assert.equal(joueur.pseudo, 'Borne');
+    assert.equal(api.visiteurs.courant(), null, 'rien conservé sur la borne');
+
+    await api.auth.deconnecter();
+    assert.equal(etat.deconnecte, `Bearer ${joueur.token}`, 'session révoquée côté serveur');
+    assert.equal(api.auth.joueur(), null);
+
+    await api.auth.connecter({ pseudo: 'Moi' });
+    api.auth.oublier();
+    assert.equal(etat.deconnecte, `Bearer ${joueur.token}`, 'oublier() ne révoque pas');
+    assert.equal(api.visiteurs.courant(), null);
 });
 
 test('stockage désactivé (storage: null) : rien n’est conservé', async () => {
@@ -335,7 +402,7 @@ test('sessions : le nom du groupe est encodé dans l’URL (?, #, /)', async () 
 
 // --- Module d'authentification -----------------------------------------------------------------
 
-test('auth.connecter (invité) : jeton visiteur, rattachement au lancement, onChange, deconnecter', async () => {
+test('auth.connecter (invité) : jeton visiteur, rattachement au lancement, onChange, oublier', async () => {
     const token = 'b'.repeat(48);
     const api = makeApi({
         [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } },
@@ -355,7 +422,7 @@ test('auth.connecter (invité) : jeton visiteur, rattachement au lancement, onCh
     assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv1.v1.sig');
     assert.equal(api.auth.joueur().pseudo, 'Léa');
 
-    api.auth.deconnecter();
+    api.auth.oublier();
     assert.equal(api.auth.joueur(), null);
     assert.deepEqual(changements, ['Léa', null]);
 });
