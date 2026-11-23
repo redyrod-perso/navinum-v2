@@ -21,9 +21,10 @@ api.onError(info => console.warn(`[Quiz] Erreur API ${info.code} :`, info.messag
  * l'appareil ou nouvel invité). La librairie rattache elle-même la partie lancée par Navinum.
  * Jamais bloquant : la partie continue sans identification.
  */
-async function identifyPlayer(pseudo) {
+async function identifyPlayer(pseudo, modeBorne = false) {
     try {
-        const joueur = await api.auth.connecter({ pseudo });
+        // Borne partagée : rien n'est conservé sur l'appareil, le joueur est déconnecté en fin de partie
+        const joueur = await api.auth.connecter({ pseudo, memoriser: !modeBorne });
         console.log('[Quiz] Joueur identifié :', joueur.pseudo, joueur.id, joueur.rattache ? '(partie rattachée)' : '');
         return joueur;
     } catch (err) {
@@ -101,6 +102,7 @@ function normalizeConfig(raw) {
         tempsParQuestion: toInt(raw.tempsParQuestion, 20, 0, 300),
         nbQuestions: toInt(raw.nbQuestions, 10, 1, 100),
         joueursMax: toInt(raw.joueursMax, 8, 1, 50),
+        modeBorne: raw.modeBorne === true,
         themes
     };
 }
@@ -191,7 +193,9 @@ function QuizApp() {
                 launchContext = ctx;
                 if (ctx) {
                     console.log('[Quiz] Lancé par Navinum:', ctx.interactif, ctx.parcours);
-                    if (ctx.visiteur && !ctx.visiteur.anonyme && ctx.visiteur.pseudo) {
+                    if (config.modeBorne) {
+                        // Borne : jamais le nom du joueur précédent
+                    } else if (ctx.visiteur && !ctx.visiteur.anonyme && ctx.visiteur.pseudo) {
                         setPlayerName(ctx.visiteur.pseudo);
                     } else if (api.auth.joueur()?.pseudo) {
                         setPlayerName(api.auth.joueur().pseudo); // joueur déjà venu sur ce navigateur
@@ -282,7 +286,11 @@ function QuizApp() {
                 victoire: winner !== null && winner === playerName,
                 joueurs: players.length,
                 duree: startedAt ? Math.round((Date.now() - startedAt) / 1000) : null
-            }).then(res => setGains(res && res.gamification ? res.gamification : null));
+            }).then(res => {
+                setGains(res && res.gamification ? res.gamification : null);
+                // Borne : le joueur suivant ne doit pas jouer sous ce nom
+                if (configRef.current && configRef.current.modeBorne) api.auth.deconnecter();
+            });
         }
     }, [stage]);
 
@@ -444,7 +452,7 @@ function QuizApp() {
         setPlayerName(nom);
         try {
             // Le joueur devient un visiteur Navinum (ses événements seront enregistrés à son nom)
-            await identifyPlayer(nom);
+            await identifyPlayer(nom, config.modeBorne);
 
             // 1. Retrouver le groupe par son nom, ou le créer
             await api.rfidGroupes.findOrCreate(groupe);
@@ -575,9 +583,15 @@ function QuizApp() {
         // Réinitialiser l'état
         setStage('home');
         setSelectedTheme(null);
-        // Conserver le pseudo du visiteur Navinum s'il est connu
-        const visiteur = (launchContext && launchContext.visiteur) || api.auth.joueur();
-        setPlayerName(visiteur && visiteur.pseudo ? visiteur.pseudo : '');
+        if (config && config.modeBorne) {
+            // Borne : déconnexion (aussi en cours de partie) et champ vide pour le joueur suivant
+            api.auth.deconnecter();
+            setPlayerName('');
+        } else {
+            // Conserver le pseudo du visiteur Navinum s'il est connu
+            const visiteur = (launchContext && launchContext.visiteur) || api.auth.joueur();
+            setPlayerName(visiteur && visiteur.pseudo ? visiteur.pseudo : '');
+        }
         setGroupName('');
         setSessionId('');
         setPlayers([]);
@@ -638,6 +652,15 @@ function QuizApp() {
                         placeholder="Entrez votre nom"
                         onKeyDown={(e) => e.key === 'Enter' && (groupMode === 'select' ? document.getElementById('groupSelect').focus() : document.getElementById('groupNameInput').focus())}
                     />
+                    {!config.modeBorne && playerName && api.auth.joueur()?.pseudo === playerName && (
+                        <button
+                            type="button"
+                            className="pas-moi"
+                            onClick={() => { api.auth.oublier(); setPlayerName(''); }}
+                        >
+                            Ce n’est pas moi
+                        </button>
+                    )}
                 </div>
 
                 <div className="input-group">

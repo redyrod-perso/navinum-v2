@@ -52,6 +52,12 @@
         "maximum": 50,
         "default": 8
       },
+      "modeBorne": {
+        "title": "Mode borne (appareil partagé)",
+        "description": "Pour une borne utilisée par plusieurs visiteurs : le joueur est déconnecté à la fin de chaque partie et rien n'est conservé sur l'appareil.",
+        "type": "boolean",
+        "default": false
+      },
       "themes": {
         "title": "Thèmes",
         "description": "Thèmes proposés au leader du groupe, avec leurs questions.",
