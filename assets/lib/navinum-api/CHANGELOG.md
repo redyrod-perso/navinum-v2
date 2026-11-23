@@ -7,6 +7,26 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.9.0] - 2026-11-24
+
+Modules réutilisables, partie 1 (#53).
+
+### Added
+- **Module gamification** `api.gamification` : `evenement(type, payload)` (gains ou null, jamais bloquant),
+  `demanderMedaille()`, `onGains()`, `bilan()`.
+- Points d'entrée par module pour les bundlers (`package.json` › `exports`) : `@navinum/api/erreurs`,
+  `@navinum/api/auth`, `@navinum/api/gamification`.
+
+### Changed
+- Un dossier par module (`src/modules/erreurs`, `auth`, `gamification`). La logique de session (reprise sur
+  l'appareil, prolongation, stockage) quitte `resources/VisiteurAPI.js` pour `modules/auth` (`ModeInvite`,
+  `Stockage`) : les ressources ne font plus que les appels HTTP.
+
+### Deprecated
+- `api.visiteurs.identifier()`, `courant()`, `oublier()` : utiliser `api.auth.connecter()`, `joueur()`, `oublier()`.
+
+---
+
 ## [0.8.0] - 2026-11-23
 
 Sessions visiteur à durée limitée (#6).

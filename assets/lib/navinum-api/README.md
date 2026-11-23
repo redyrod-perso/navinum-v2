@@ -15,7 +15,9 @@ Librairie JavaScript complète pour interagir avec les APIs Symfony de Navinum. 
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [API Usage](#api-usage)
+- [Modules réutilisables](#modules-réutilisables)
 - [Authentification des joueurs](#authentification-des-joueurs)
+- [Gamification](#gamification)
 - [Gestion des erreurs](#gestion-des-erreurs)
 - [Configuration avancée](#configuration-avancée)
 - [Exemples réels](#exemples-réels)
@@ -679,6 +681,33 @@ console.log('Top interactifs:', stats.topInteractifs);
 
 ---
 
+## Modules réutilisables
+
+La librairie est faite de **modules sans HTML ni design**, réutilisables par n'importe quel interactif (le quiz
+n'en est qu'un exemple) :
+
+| Module | Accès | Rôle |
+|--------|-------|------|
+| socle | `new NavinumAPI()`, `api.launch()` | configuration, appels HTTP, temps réel Mercure, lancement `?nv=` |
+| erreurs | `NavinumAPI.erreurs` | codes stables, messages, actions conseillées |
+| auth | `api.auth` | identification, sessions (30 min / 12 h), reprise sur l'appareil, mode borne |
+| gamification | `api.gamification` | événements de la partie, XP et médailles gagnés, médaille demandée |
+| multijoueur | *à venir (#53, partie 2)* | groupe, lobby, leader, scores en direct, gagnant |
+
+**Interactif HTML** : un seul fichier, tous les modules — `<script src="/build/navinum-api.js"></script>`.
+
+**Avec un bundler** (Vite, webpack…) : chaque module a son propre point d'entrée.
+
+```javascript
+import NavinumAPI from '@navinum/api';
+import { erreurs } from '@navinum/api/erreurs';           // utilisable seul, sans instance
+import { Auth } from '@navinum/api/auth';                 // classes, pour composer ou étendre
+import { Gamification } from '@navinum/api/gamification';
+```
+
+Pas de fichier `<script>` par module : chacun embarquerait le socle (code chargé plusieurs fois, versions
+incompatibles possibles sur une même page).
+
 ## Authentification des joueurs
 
 Module `api.auth` : **une seule API pour tous les modes de connexion**. Il rend un joueur et son **jeton visiteur**
@@ -721,6 +750,26 @@ Le rattachement de la partie n'est jamais bloquant : en cas d'échec, `joueur.ra
 connecté. Le stockage se règle avec l'option `storage` (`localStorage` par défaut, `null` pour ne rien conserver).
 
 ---
+
+## Gamification
+
+Module `api.gamification`, sans affichage. Les XP et médailles se décident côté serveur, selon les règles de
+l'interactif (admin › Interactifs › 🏆, ou section `gamification` du manifeste).
+
+```javascript
+await api.launch();                                  // lancé par Navinum (?nv=)
+await api.auth.connecter({ pseudo: 'Léa' });         // joueur identifié
+
+api.gamification.onGains(gains => afficher(gains));  // à chaque XP ou nouvelle médaille
+const gains = await api.gamification.evenement('quiz.completed', { score: 8, total: 10 });
+// { xp: [{ typologie: 'Joueur', points: 80 }], medailles: [{ libelle: 'Sans faute', … }], totalXp: 240 }
+await api.gamification.demanderMedaille('Explorateur'); // médaille « attribuable » par l'interactif
+api.gamification.bilan();                            // { xp, medailles, totalXp } depuis l'ouverture de la page
+```
+
+- `evenement()` est **jamais bloquant** : en mode autonome (sans `?nv=`), sans joueur identifié ou en cas d'erreur
+  réseau, il rend `null` et le jeu continue. Chaque appel prolonge aussi la session du joueur.
+- `demanderMedaille()` lève les refus (`MEDAILLE_NON_ATTRIBUABLE`, `NON_IDENTIFIE`…, voir le module d'erreurs).
 
 ## Gestion des erreurs
 
@@ -1182,10 +1231,11 @@ navinum-api/
 │   │   ├── Config.js           # Gestion configuration
 │   │   ├── Errors.js           # Classes d'erreurs
 │   │   └── Realtime.js         # Abonnements Mercure
-│   ├── modules/                # Modules transverses
-│   │   ├── Auth.js             # Authentification des joueurs (api.auth)
-│   │   └── Erreurs.js          # Gestion des erreurs (NavinumAPI.erreurs)
-│   ├── resources/              # APIs par ressource
+│   ├── modules/                # Modules réutilisables (un dossier, un point d'entrée index.js)
+│   │   ├── erreurs/            # NavinumAPI.erreurs
+│   │   ├── auth/               # api.auth : Auth, ModeInvite (session), Stockage (appareil)
+│   │   └── gamification/       # api.gamification
+│   ├── resources/              # Appels HTTP par ressource du serveur (sans logique)
 │   │   ├── BaseResource.js     # Classe de base (CRUD)
 │   │   ├── SessionAPI.js       # API Sessions
 │   │   ├── ExpositionAPI.js    # API Expositions
