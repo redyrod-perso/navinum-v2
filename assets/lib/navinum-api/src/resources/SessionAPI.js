@@ -50,7 +50,9 @@ export class SessionAPI extends BaseResource {
 
     /**
      * Crée une nouvelle session ou rejoint une session existante
-     * @param {Object} data - { playerName, sessionId? }
+     * @param {Object} data - { playerName, sessionId?, rfidGroupeName?, launchToken? } — `launchToken` (jeton `?nv=`)
+     *        fixe le nombre maximum de joueurs (`joueursMax` de la configuration du lancement ; 8 sans jeton)
+     * @throws {NavinumAPIError} code `GROUPE_COMPLET` (409) si le groupe est plein
      */
     async create(data) {
         return this.client.post('/api/session/create', data);
@@ -59,7 +61,8 @@ export class SessionAPI extends BaseResource {
     /**
      * Rejoint une session existante
      * @param {string} sessionId - Identifiant de la session
-     * @param {Object} data - { playerName }
+     * @param {Object} data - { playerName, launchToken? }
+     * @throws {NavinumAPIError} code `GROUPE_COMPLET` (409) si le groupe est plein, `PARTIE_EN_COURS` (409)
      */
     async join(sessionId, data) {
         return this.client.post(`${this.path(sessionId)}/join`, data);
@@ -84,9 +87,10 @@ export class SessionAPI extends BaseResource {
     }
 
     /**
-     * Met à jour le score d'un joueur
+     * Met à jour le score d'un joueur (partie en cours, +1 au plus par appel ; renvoyer le même score est sans effet)
      * @param {string} sessionId - Identifiant de la session
      * @param {Object} data - { playerName, score }
+     * @throws {NavinumAPIError} code `SCORE_REFUSE` (409) si le score n'est pas plausible
      */
     async updateScore(sessionId, data) {
         return this.client.post(`${this.path(sessionId)}/score`, data);

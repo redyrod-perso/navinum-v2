@@ -55,6 +55,16 @@ export const LAUNCH_TOKEN_PARAM = 'nv';
  *           Voir {@link LaunchAPI.subscribeConfig}.
  * @property {function(string): Promise<LaunchVisiteur|null>} identify - Rattache le visiteur
  *           (jeton `nvv1.…`) à ce lancement et met à jour `visiteur`. Voir {@link LaunchAPI#identify}.
+ * @property {function(string): Promise<MedailleObtenue>} demanderMedaille - Demande une médaille pour le
+ *           visiteur de ce lancement. Voir {@link LaunchAPI#demanderMedaille}.
+ */
+
+/**
+ * Résultat d'une médaille demandée par l'interactif.
+ * @typedef {Object} MedailleObtenue
+ * @property {{libelle: string, description: (string|null), image: (string|null)}} medaille
+ * @property {boolean} nouvelle - false si le visiteur l'avait déjà (appel idempotent)
+ * @property {number} totalXp - Total d'XP du visiteur
  */
 
 /**
@@ -214,6 +224,31 @@ export class LaunchAPI {
     }
 
     /**
+     * Demande une médaille pour le visiteur rattaché à ce lancement (ex. « Explorateur » quand le joueur
+     * a tout visité). Anti-triche : seules les médailles déclarées `attribuables` dans les règles de
+     * gamification de l'interactif sont accordées. Idempotent (médaille unique : une fois par visiteur ;
+     * sinon une fois par partie).
+     *
+     * @param {string} token - Jeton de lancement
+     * @param {string} medaille - Libellé exact de la médaille
+     * @returns {Promise<MedailleObtenue>}
+     * @throws {ValidationError} Libellé vide
+     * @throws {UnauthorizedError} code `NON_IDENTIFIE` : aucun visiteur rattaché au lancement
+     * @throws {NavinumAPIError} code `MEDAILLE_NON_ATTRIBUABLE` (403) ou `MEDAILLE_INCONNUE` (404)
+     *
+     * @example
+     * const { medaille, nouvelle } = await ctx.demanderMedaille('Explorateur');
+     * if (nouvelle) feliciter(medaille.libelle);
+     */
+    async demanderMedaille(token, medaille) {
+        const libelle = typeof medaille === 'string' ? medaille.trim() : '';
+        if (!libelle) {
+            throw new ValidationError('Libellé de médaille manquant', { medaille: 'requis' });
+        }
+        return this.client.post(`${this.tokenPath(token)}/medailles`, { medaille: libelle });
+    }
+
+    /**
      * Résout un jeton et retourne le contexte de lancement enrichi d'une méthode `track()`.
      *
      * @param {string|null} [token] - Jeton explicite ; à défaut, lu dans `?nv=` de l'URL courante
@@ -250,6 +285,7 @@ export class LaunchAPI {
                 callback,
                 { log: (...args) => this.client.config.log(...args) }
             ),
+            demanderMedaille: (medaille) => this.demanderMedaille(effectiveToken, medaille),
             identify: async (visiteurToken) => {
                 const updated = await this.identify(effectiveToken, visiteurToken);
                 ctx.visiteur = updated?.visiteur ?? null;

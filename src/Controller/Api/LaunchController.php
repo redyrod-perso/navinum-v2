@@ -4,6 +4,7 @@ namespace App\Controller\Api;
 
 use App\Entity\LaunchToken;
 use App\Gamification\GamificationService;
+use App\Gamification\MedailleRefusee;
 use App\Repository\LaunchTokenRepository;
 use App\Service\LaunchService;
 use App\Service\VisiteurToken;
@@ -19,6 +20,8 @@ use Symfony\Component\Routing\Attribute\Route;
  * - POST /api/launch/{token}/visiteur rattache le visiteur (Authorization: Bearer <jeton visiteur>)
  * - POST /api/launch/{token}/events  événement {type, payload} → consigné dans LogVisite,
  *                                    puis gamification (XP, médailles) renvoyée dans `gamification`
+ * - POST /api/launch/{token}/medailles médaille demandée par l'interactif {medaille} (visiteur rattaché requis,
+ *                                    médaille listée dans `attribuables` des règles de l'interactif)
  *
  * Codes : 404 jeton inconnu, 410 jeton expiré, 400 requête invalide.
  */
@@ -104,6 +107,45 @@ final class LaunchController extends AbstractController
             'logVisite' => (string) $log->getId(),
             'gamification' => $gamification,
         ], 202);
+    }
+
+    /**
+     * Médaille demandée par l'interactif pour le visiteur de ce lancement.
+     * 200 : `{ medaille, nouvelle, totalXp }` (nouvelle = false si déjà obtenue : appel idempotent) ;
+     * 401 NON_IDENTIFIE (aucun visiteur rattaché) ; 403 MEDAILLE_NON_ATTRIBUABLE ; 404 MEDAILLE_INCONNUE.
+     */
+    #[Route('/medailles', name: 'medaille', methods: ['POST'])]
+    public function medaille(string $token, Request $request): JsonResponse
+    {
+        $launchToken = $this->tokens->findOneByToken($token);
+        if ($error = $this->tokenError($launchToken)) {
+            return $error;
+        }
+        $visiteur = $launchToken->getVisiteur();
+        if (null === $visiteur) {
+            return $this->json(['error' => 'Identifiez le joueur avant de lui attribuer une médaille', 'code' => 'NON_IDENTIFIE'], 401);
+        }
+        $body = json_decode($request->getContent(), true);
+        $libelle = \is_array($body) && \is_string($body['medaille'] ?? null) ? trim($body['medaille']) : '';
+        if ('' === $libelle || mb_strlen($libelle) > 255) {
+            return $this->json(['error' => 'Champ "medaille" obligatoire (libellé de la médaille)', 'code' => 'VALIDATION'], 400);
+        }
+
+        try {
+            $result = $this->gamification->demanderMedaille(
+                $launchToken->getInteractif(),
+                $visiteur,
+                $libelle,
+                'launch:'.substr($launchToken->getToken(), 0, 16),
+            );
+        } catch (MedailleRefusee $e) {
+            return $this->json(['error' => $e->getMessage(), 'code' => $e->codeMetier], 'MEDAILLE_INCONNUE' === $e->codeMetier ? 404 : 403);
+        }
+
+        // Trace dans le parcours du visiteur (et le fil en direct de l'admin)
+        $this->launch->recordEvent($launchToken, 'navinum.medaille', ['medaille' => $libelle, 'nouvelle' => $result['nouvelle']]);
+
+        return $this->json($result);
     }
 
     private function tokenError(?LaunchToken $token): ?JsonResponse

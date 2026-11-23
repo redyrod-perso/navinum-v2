@@ -2,6 +2,9 @@
 
 namespace App\Tests\Functional;
 
+use App\Entity\Interactif;
+use App\Entity\LaunchToken;
+use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
@@ -127,6 +130,57 @@ class SessionLifecycleTest extends WebTestCase
 
         $this->client->request('GET', "/api/session/{$this->groupe}");
         $this->assertResponseIsSuccessful();
+    }
+
+    /** #17 : le nombre maximum de joueurs est imposé par le serveur (configuration du lancement, sinon 8). */
+    public function testGroupeCompletRefuseParLeServeur(): void
+    {
+        $em = static::getContainer()->get(EntityManagerInterface::class);
+        $quiz = (new Interactif())->setLibelle('Quiz duo '.bin2hex(random_bytes(3)))
+            ->setVariable(json_encode(['type' => 'object', 'properties' => ['joueursMax' => ['type' => 'integer', 'default' => 2]]]));
+        $token = new LaunchToken($quiz);
+        $em->persist($quiz);
+        $em->persist($token);
+        $em->flush();
+
+        $this->post('/api/session/create', ['playerName' => 'Alice', 'sessionId' => $this->groupe, 'launchToken' => $token->getToken()]);
+        $this->assertSame(200, $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'Bob'])['status']);
+        $refus = $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'Chloé']);
+        $this->assertSame([409, 'GROUPE_COMPLET'], [$refus['status'], $refus['body']['code']]);
+        $this->assertStringContainsString('2 joueurs maximum', $refus['body']['error']);
+        $this->assertSame(409, $this->post('/api/session/create', ['playerName' => 'Chloé', 'sessionId' => $this->groupe])['status']);
+        // Un joueur déjà présent peut revenir
+        $this->assertSame(200, $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'Bob'])['status']);
+    }
+
+    public function testSansLancementHuitJoueursMaximum(): void
+    {
+        $this->post('/api/session/create', ['playerName' => 'J0', 'sessionId' => $this->groupe, 'launchToken' => 'inconnu']);
+        for ($i = 1; $i < 8; ++$i) {
+            $this->assertSame(200, $this->post("/api/session/{$this->groupe}/join", ['playerName' => "J$i"])['status']);
+        }
+        $this->assertSame('GROUPE_COMPLET', $this->post("/api/session/{$this->groupe}/join", ['playerName' => 'J8'])['body']['code']);
+    }
+
+    /** Un score ne progresse que d'un point à la fois, pendant une partie, pour un joueur du groupe. */
+    public function testScoreInvraisemblableRefuse(): void
+    {
+        $this->post('/api/session/create', ['playerName' => 'Alice', 'sessionId' => $this->groupe]);
+        $score = fn (array $data) => $this->post("/api/session/{$this->groupe}/score", $data);
+
+        $this->assertSame('SCORE_REFUSE', $score(['playerName' => 'Alice', 'score' => 1])['body']['code'], 'pas avant le démarrage');
+        $this->post("/api/session/{$this->groupe}/start", ['playerName' => 'Alice', 'theme' => 'histoire']);
+
+        $this->assertSame(200, $score(['playerName' => 'Alice', 'score' => 1])['status']);
+        $this->assertSame(200, $score(['playerName' => 'Alice', 'score' => 1])['status'], 'même score renvoyé : sans effet');
+        $this->assertSame(200, $score(['playerName' => 'Alice', 'score' => 2])['status']);
+        foreach ([['playerName' => 'Alice', 'score' => 10], ['playerName' => 'Alice', 'score' => 1],
+            ['playerName' => 'Alice', 'score' => '3'], ['playerName' => 'Intrus', 'score' => 1]] as $data) {
+            $res = $score($data);
+            $this->assertSame([409, 'SCORE_REFUSE'], [$res['status'], $res['body']['code']], json_encode($data));
+        }
+        $this->client->request('GET', "/api/session/{$this->groupe}");
+        $this->assertSame(2, json_decode($this->client->getResponse()->getContent(), true)['session']['players'][0]['score']);
     }
 
     private function vieillirSession(int $secondes): void

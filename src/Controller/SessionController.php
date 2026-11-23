@@ -2,6 +2,7 @@
 
 namespace App\Controller;
 
+use App\Repository\LaunchTokenRepository;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,9 +31,15 @@ class SessionController extends AbstractController
     /** Longueur maximale d'un identifiant de session (nom du groupe). */
     public const ID_MAX = 100;
 
+    /** Joueurs maximum par groupe sans configuration de lancement (= défaut `joueursMax` du manifeste du quiz). */
+    public const MAX_PLAYERS_DEFAULT = 8;
+    /** Plafond absolu, quelle que soit la configuration. */
+    public const MAX_PLAYERS_LIMIT = 50;
+
     public function __construct(
         private readonly HubInterface $hub,
         private readonly LoggerInterface $logger,
+        private readonly LaunchTokenRepository $launchTokens,
     ) {
     }
 
@@ -69,6 +76,35 @@ class SessionController extends AbstractController
     private static function error(string $message, string $code, int $status): JsonResponse
     {
         return new JsonResponse(['error' => $message, 'code' => $code], $status);
+    }
+
+    /**
+     * Nombre maximum de joueurs : `joueursMax` de la configuration du lancement (jeton `?nv=` transmis par
+     * l'interactif, configuration fixée côté serveur), sinon MAX_PLAYERS_DEFAULT ; borné à 1..MAX_PLAYERS_LIMIT.
+     */
+    private function maxPlayers(mixed $launchToken): int
+    {
+        $max = self::MAX_PLAYERS_DEFAULT;
+        if (\is_string($launchToken) && '' !== $launchToken && \strlen($launchToken) <= 128) {
+            $token = $this->launchTokens->findOneByToken($launchToken);
+            if (null !== $token && !$token->isExpired() && is_numeric($token->getConfig()['joueursMax'] ?? null)) {
+                $max = (int) $token->getConfig()['joueursMax'];
+            }
+        }
+
+        return max(1, min(self::MAX_PLAYERS_LIMIT, $max));
+    }
+
+    private static function groupeComplet(array $session): JsonResponse
+    {
+        $max = $session['maxPlayers'] ?? self::MAX_PLAYERS_DEFAULT;
+
+        return self::error(\sprintf('Ce groupe est complet (%d joueurs maximum) : choisissez-en un autre.', $max), 'GROUPE_COMPLET', 409);
+    }
+
+    private static function isFull(array $session): bool
+    {
+        return \count($session['players'] ?? []) >= ($session['maxPlayers'] ?? self::MAX_PLAYERS_DEFAULT);
     }
 
     private function getSession(string $sessionId): ?array
@@ -158,6 +194,9 @@ class SessionController extends AbstractController
                 }
 
                 if (!$playerExists) {
+                    if (self::isFull($existingSession)) {
+                        return self::groupeComplet($existingSession);
+                    }
                     $existingSession['players'][] = [
                         'name' => $playerName,
                         'score' => 0,
@@ -187,6 +226,7 @@ class SessionController extends AbstractController
             'rfidGroupeName' => $rfidGroupeName,
             'leader' => $playerName, // Le créateur est le leader
             'status' => 'lobby',
+            'maxPlayers' => $this->maxPlayers($data['launchToken'] ?? null),
             'theme' => null,
             'players' => [
                 [
@@ -234,6 +274,7 @@ class SessionController extends AbstractController
                 'rfidGroupeName' => $session['rfidGroupeName'] ?? null,
                 'leader' => $playerName,
                 'status' => 'lobby',
+                'maxPlayers' => $this->maxPlayers($data['launchToken'] ?? null),
                 'theme' => null,
                 'players' => [['name' => $playerName, 'score' => 0, 'joinedAt' => time(), 'isLeader' => true]],
                 'createdAt' => time(),
@@ -254,6 +295,9 @@ class SessionController extends AbstractController
         }
 
         if (!$playerExists) {
+            if (self::isFull($session)) {
+                return self::groupeComplet($session);
+            }
             $session['players'][] = [
                 'name' => $playerName,
                 'score' => 0,
@@ -397,7 +441,7 @@ class SessionController extends AbstractController
     {
         $data = json_decode($request->getContent(), true);
         $playerName = $data['playerName'] ?? null;
-        $score = $data['score'] ?? 0;
+        $score = $data['score'] ?? null;
 
         if (!$playerName) {
             return self::error('Nom du joueur manquant', 'VALIDATION', 400);
@@ -408,13 +452,23 @@ class SessionController extends AbstractController
             return self::error('Session non trouvée', 'SESSION_INTROUVABLE', 404);
         }
 
-        // Mettre à jour le score du joueur
-        foreach ($session['players'] as &$player) {
+        // Score plausible uniquement : partie en cours, joueur du groupe, +1 au plus par appel
+        // (une bonne réponse à la fois ; renvoyer le même score est sans effet)
+        if (!\is_int($score) || 'playing' !== ($session['status'] ?? null)) {
+            return self::error('Score refusé : aucune partie en cours ou score invalide.', 'SCORE_REFUSE', 409);
+        }
+        $index = null;
+        foreach ($session['players'] as $i => $player) {
             if ($player['name'] === $playerName) {
-                $player['score'] = $score;
+                $index = $i;
                 break;
             }
         }
+        $current = null === $index ? null : (int) ($session['players'][$index]['score'] ?? 0);
+        if (null === $current || $score < $current || $score > $current + 1) {
+            return self::error('Score refusé : il ne peut augmenter que d\'un point par bonne réponse.', 'SCORE_REFUSE', 409);
+        }
+        $session['players'][$index]['score'] = $score;
         $this->saveSession($sessionId, $session);
         $this->notifySessionUpdate($sessionId);
 

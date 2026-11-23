@@ -99,6 +99,49 @@ final class GamificationService
         return $typologie;
     }
 
+    /**
+     * Médaille demandée par l'interactif lui-même (ex. « Explorateur » quand le joueur a tout visité).
+     *
+     * Anti-triche : seules les médailles listées dans `attribuables` des règles de l'interactif sont accordées.
+     * Idempotent : une médaille unique ne s'obtient qu'une fois par visiteur, une autre au plus une fois par
+     * partie (`$connection`).
+     *
+     * @return array{medaille: array{libelle: string, description: ?string, image: ?string}, nouvelle: bool, totalXp: int}
+     *
+     * @throws MedailleRefusee code MEDAILLE_NON_ATTRIBUABLE ou MEDAILLE_INCONNUE
+     */
+    public function demanderMedaille(Interactif $interactif, Visiteur $visiteur, string $libelle, string $connection): array
+    {
+        $attribuables = $interactif->getGamification()['attribuables'] ?? [];
+        if (!\is_array($attribuables) || !\in_array($libelle, $attribuables, true)) {
+            throw new MedailleRefusee('MEDAILLE_NON_ATTRIBUABLE', \sprintf('La médaille « %s » ne peut pas être attribuée par cet interactif.', $libelle));
+        }
+        $medaille = $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $libelle]);
+        if (null === $medaille) {
+            throw new MedailleRefusee('MEDAILLE_INCONNUE', \sprintf('La médaille « %s » n\'existe pas.', $libelle));
+        }
+
+        $deja = $this->em->getRepository(VisiteurMedaille::class)->findOneBy(
+            $medaille->isUnique()
+                ? ['visiteur' => $visiteur, 'medaille' => $medaille]
+                : ['visiteur' => $visiteur, 'medaille' => $medaille, 'connection' => $connection],
+        );
+        if (null === $deja) {
+            $this->em->persist((new VisiteurMedaille())->setVisiteur($visiteur)->setMedaille($medaille)->setConnection($connection));
+            $this->em->flush();
+        }
+
+        return [
+            'medaille' => [
+                'libelle' => $medaille->getLibelle(),
+                'description' => $medaille->getDescription(),
+                'image' => $medaille->getImage(),
+            ],
+            'nouvelle' => null === $deja,
+            'totalXp' => $this->xpService->getTotalByVisiteur($visiteur->getId())['total'],
+        ];
+    }
+
     private function alreadyHas(Visiteur $visiteur, Medaille $medaille): bool
     {
         return null !== $this->em->getRepository(VisiteurMedaille::class)->findOneBy(['visiteur' => $visiteur, 'medaille' => $medaille]);

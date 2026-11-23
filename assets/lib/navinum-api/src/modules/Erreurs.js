@@ -51,6 +51,9 @@ export const CODES = Object.freeze({
     PARTIE_DEMARREE: { titre: 'Partie déjà commencée', message: 'La partie a déjà commencé.', reessayable: false, action: ACTIONS.AUCUNE },
     GROUPE_COMPLET: { titre: 'Groupe complet', message: 'Ce groupe est complet : choisissez-en un autre.', reessayable: false, action: ACTIONS.CHOISIR_AUTRE_GROUPE },
     NON_LEADER: { titre: 'Réservé au leader', message: 'Seul le leader du groupe peut faire cette action.', reessayable: false, action: ACTIONS.AUCUNE },
+    SCORE_REFUSE: { titre: 'Score refusé', message: 'Ce score n’a pas été accepté par le serveur.', reessayable: false, action: ACTIONS.AUCUNE },
+    MEDAILLE_NON_ATTRIBUABLE: { titre: 'Médaille non attribuable', message: 'Cette médaille ne peut pas être attribuée par cet interactif.', reessayable: false, action: ACTIONS.AUCUNE },
+    MEDAILLE_INCONNUE: { titre: 'Médaille inconnue', message: 'Cette médaille n’existe pas.', reessayable: false, action: ACTIONS.AUCUNE },
     MODE_INDISPONIBLE: { titre: 'Connexion indisponible', message: 'Ce mode de connexion n’est pas encore disponible.', reessayable: false, action: ACTIONS.AUCUNE },
     INCONNU: { titre: 'Erreur inattendue', message: 'Une erreur inattendue est survenue.', reessayable: true, action: ACTIONS.REESSAYER }
 });

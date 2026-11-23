@@ -40,7 +40,10 @@ class GamificationTest extends WebTestCase
                 ['medaille' => $sansFaute, 'evenement' => 'quiz.completed', 'si' => 'score == total'],
                 ['medaille' => 'Médaille inexistante', 'evenement' => 'quiz.completed'],
             ],
+            'attribuables' => [$sansFaute, 'Explorateur '.$this->suffix, 'Médaille inexistante'],
         ]);
+        $this->em->persist((new Medaille())->setLibelle('Explorateur '.$this->suffix)->setIsUnique(false));
+        $this->em->persist((new Medaille())->setLibelle('Réservée '.$this->suffix)->setIsUnique(true));
         $parcours = (new Parcours())->setLibelle('Parcours gamifié '.$this->suffix);
         $token = new LaunchToken($quiz, $parcours->addInteractif($quiz));
         foreach ([$quiz, $parcours, $token] as $e) {
@@ -114,5 +117,51 @@ class GamificationTest extends WebTestCase
         $this->em->clear();
 
         return $this->em->getRepository(LaunchToken::class)->findOneBy(['token' => $launch])->getVisiteur();
+    }
+
+    private function demander(string $launch, string $medaille): array
+    {
+        $this->client->jsonRequest('POST', "/api/launch/$launch/medailles", ['medaille' => $medaille]);
+
+        return ['status' => $this->client->getResponse()->getStatusCode(), 'body' => json_decode($this->client->getResponse()->getContent(), true)];
+    }
+
+    /** #8 : médaille demandée par l'interactif, uniquement si ses règles la déclarent attribuable. */
+    public function testMedailleDemandeeParLInteractif(): void
+    {
+        [$launch] = $this->partie();
+
+        $res = $this->demander($launch, 'Sans faute '.$this->suffix);
+        $this->assertSame(200, $res['status']);
+        $this->assertSame('Sans faute '.$this->suffix, $res['body']['medaille']['libelle']);
+        $this->assertTrue($res['body']['nouvelle']);
+
+        // Idempotent : une médaille unique ne s'obtient qu'une fois
+        $encore = $this->demander($launch, 'Sans faute '.$this->suffix);
+        $this->assertSame([200, false], [$encore['status'], $encore['body']['nouvelle']]);
+        // Non unique : au plus une fois par partie
+        $this->assertTrue($this->demander($launch, 'Explorateur '.$this->suffix)['body']['nouvelle']);
+        $this->assertFalse($this->demander($launch, 'Explorateur '.$this->suffix)['body']['nouvelle']);
+
+        $nb = $this->em->getRepository(VisiteurMedaille::class)->count([
+            'medaille' => $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => 'Sans faute '.$this->suffix]),
+        ]);
+        $this->assertSame(1, $nb);
+    }
+
+    public function testMedailleDemandeeRefusee(): void
+    {
+        [$launch] = $this->partie();
+        $reservee = $this->demander($launch, 'Réservée '.$this->suffix);
+        $this->assertSame([403, 'MEDAILLE_NON_ATTRIBUABLE'], [$reservee['status'], $reservee['body']['code']]);
+        $inconnue = $this->demander($launch, 'Médaille inexistante');
+        $this->assertSame([404, 'MEDAILLE_INCONNUE'], [$inconnue['status'], $inconnue['body']['code']]);
+        $vide = $this->demander($launch, '  ');
+        $this->assertSame([400, 'VALIDATION'], [$vide['status'], $vide['body']['code']]);
+
+        $this->suffix = bin2hex(random_bytes(3)); // autre interactif, autres médailles
+        [$anonyme] = $this->partie(false);
+        $sansJoueur = $this->demander($anonyme, 'Sans faute '.$this->suffix);
+        $this->assertSame([401, 'NON_IDENTIFIE'], [$sansJoueur['status'], $sansJoueur['body']['code']]);
     }
 }
