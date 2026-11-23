@@ -447,7 +447,7 @@ un simple fichier de ce dossier, 100 caractères max).
 **Temps réel :** chaque changement de session est publié sur le hub Mercure intégré, topic
 `/navinum/sessions/{id}` (`{"type": "session", "session": {…}}`). Le quiz s'y abonne avec `EventSource` et relit l'état
 une fois à la connexion. Il n'y a plus de flux SSE tenu par PHP (`/api/session/{id}/stream` supprimé) : aucun thread
-PHP n'est bloqué pendant une partie. Les fichiers `public/quiz/*`, `public/build/*` et `/config.js` sont servis avec
+PHP n'est bloqué pendant une partie. Les fichiers `public/quiz/*`, `public/exemples/*`, `public/build/*` et `/config.js` sont servis avec
 `Cache-Control: no-cache` pour que les navigateurs prennent la nouvelle version après un déploiement.
 
 **Configuration (thèmes, questions, temps, joueurs) :** déclarée dans `public/quiz/navinum.json` (`configSchema`,
@@ -486,6 +486,16 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
   ou non), `EMAIL_DEJA_UTILISE`, `TROP_DE_TENTATIVES` (rate limiter `connexion_visiteur` 10 échecs / 15 min par IP +
   adresse ; `inscription_visiteur` 20 / h par IP). Admin › Visiteurs : champ « Nouveau mot de passe » (haché ; plus
   jamais d'affichage du mot de passe). Côté JS : mode `compte`, `api.auth.creerCompte()`.
+- **OAuth multi-fournisseurs (#4)** : `App\OAuth\FournisseursOAuth` (préréglages Google, Microsoft, Facebook ; un
+  fournisseur est actif dès que `OAUTH_<NOM>_ID` et `OAUTH_<NOM>_SECRET` sont dans les `.env` du serveur, jamais dans
+  le dépôt ; adresse de redirection à déclarer chez lui : `https://<site>/api/visiteur/oauth/<nom>/retour`).
+  Parcours : `GET /api/visiteur/oauth/fournisseurs` → `POST …/<nom>/demarrer {retour, memoriser}` (Bearer facultatif)
+  → fournisseur → `GET …/<nom>/retour` → redirection `retour#navinum-oauth=<code>` → `POST …/echange {code}` (usage
+  unique, 2 min, cache.app). `state` signé (EtatOAuth, 10 min), retour sur le même site uniquement, jeton jamais dans
+  une URL. Liaison (`ConnexionOAuth`, table `visiteur_identite`, plusieurs fournisseurs par visiteur) : compte
+  fournisseur déjà lié → visiteur connecté au démarrage (le fournisseur lui est ajouté ; un invité devient un compte)
+  → adresse garantie par le fournisseur (Google seulement) → nouveau compte. Tests : faux fournisseur (MockHttpClient),
+  identifiants factices dans `.env.test`. Côté JS : mode `oauth`, `api.auth.retourConnexion()`, `fournisseursOAuth()`.
 - **Authentificateur du pare-feu `api`** : `VisiteurAuthenticator`, jeton Bearer `nvv2` valide → `VisiteurUser`
   (ROLE_VISITEUR) ; tolérant (jeton invalide : requête sans authentification) ; point d'entrée 401 `NON_IDENTIFIE`.
 - **Borne partagée** : `modeBorne` dans la configuration du placement (quiz : déconnexion en fin de partie, rien de
@@ -591,7 +601,8 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 - Tous délivrent le même **jeton Bearer** visiteur (format actuel `nvv2.…` : expiration, révocation et
   rafraîchissement — faits en #6). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
 - Actuel : visiteur invité par pseudo, session de 30 min (12 h au plus), profil repris sur le même appareil (#6) ;
-  comptes e-mail + mot de passe (#4). À venir : OAuth Google (#4, suite), e-mails de compte via Brevo, badge RFID (#5).
+  comptes e-mail + mot de passe et OAuth Google / Microsoft / Facebook (#4). À venir : e-mails de compte via Brevo
+  (#71), badge RFID (#5), Apple (compte développeur payant).
 
 ### Gamification (XP, médailles) — implémentée (#7)
 

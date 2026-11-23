@@ -409,7 +409,7 @@ test('auth.connecter (invité) : jeton visiteur, rattachement au lancement, onCh
         [`POST /api/launch/${token}/visiteur`]: { status: 200, body: { visiteur: { id: 'v1', pseudo: 'Léa', anonyme: true } } },
         'POST /api/visiteur/invite': (call) => ({ status: 201, body: { visiteur: { id: 'v1', pseudo: call.body.pseudo, anonyme: true }, token: 'nvv1.v1.sig' } }),
     });
-    assert.deepEqual(api.auth.modes(), ['invite', 'compte']);
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte', 'oauth']);
     const ctx = await api.launch(token);
     const changements = [];
     api.auth.onChange((j) => changements.push(j && j.pseudo));
@@ -713,7 +713,7 @@ test('auth : un mode branché fournit connecter, entretenir et deconnecter (cont
         entretenir: async (joueur, { memoriser }) => { appels.push(`entretenir:${memoriser}`); return { ...joueur, token: 'nvv2.badge2' }; },
         deconnecter: async (joueur) => { appels.push(`deconnecter:${joueur.token}`); },
     });
-    assert.deepEqual(api.auth.modes(), ['invite', 'compte', 'rfid']);
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte', 'oauth', 'rfid']);
 
     const ctx = await api.launch(token);
     const joueur = await api.auth.connecter({ mode: 'rfid', badge: '042' });
@@ -756,7 +756,7 @@ test('auth : créer un compte depuis un invité (même visiteur), se connecter, 
             : { status: 401, body: { error: 'Adresse e-mail ou mot de passe incorrect.', code: 'IDENTIFIANTS_INVALIDES' } }),
         'POST /api/visiteur/reprendre': (call) => ({ status: 200, body: { visiteur: { id: 'v1', pseudo: call.body.pseudo, anonyme: false }, token: 'nvv2.repris', expiresAt: dans30() } }),
     });
-    assert.deepEqual(api.auth.modes(), ['invite', 'compte']);
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte', 'oauth']);
 
     await api.auth.connecter({ pseudo: 'Tom' });
     const compte = await api.auth.creerCompte({ email: 'tom@exemple.test', motDePasse: 'secret-123', newsletter: true });
@@ -782,4 +782,49 @@ test('auth : créer un compte depuis un invité (même visiteur), se connecter, 
     const sansCompte = await api.auth.connecter({ mode: 'compte' }).catch((e) => e);
     assert.equal(NavinumAPI.erreurs.decrire(sansCompte).code, 'NON_IDENTIFIE');
     assert.equal(NavinumAPI.erreurs.decrire(new NavinumAPI.NavinumAPIError('x', 429)).code, 'TROP_DE_TENTATIVES');
+});
+
+// --- #4 : OAuth multi-fournisseurs ----------------------------------------------------------------
+
+test('auth oauth : départ vers le fournisseur (joueur connecté transmis), retour, échange, rattachement', async () => {
+    const token = '7'.repeat(48);
+    const lieu = { href: 'http://navinum.test/jeu/index.html?nv=' + token, hash: '', assign(url) { this.parti = url; } };
+    const api = makeApi({
+        'GET /api/visiteur/oauth/fournisseurs': { status: 200, body: { fournisseurs: [{ nom: 'google', libelle: 'Google' }, { nom: 'microsoft', libelle: 'Microsoft' }] } },
+        'POST /api/visiteur/invite': { status: 201, body: { visiteur: { id: 'v1', pseudo: 'Tom', anonyme: true }, token: 'nvv2.invite', expiresAt: new Date(Date.now() + 1800e3).toISOString(), appareil: 'nva1.tom' } },
+        'POST /api/visiteur/oauth/google/demarrer': { status: 200, body: { url: 'https://accounts.google.com/o/oauth2/v2/auth?state=x' } },
+        'POST /api/visiteur/oauth/echange': (call) => (call.body.code === 'abc'
+            ? { status: 200, body: { visiteur: { id: 'v1', pseudo: 'Tom', anonyme: false }, token: 'nvv2.oauth', expiresAt: new Date(Date.now() + 1800e3).toISOString(), appareil: 'nva1.g', fournisseur: 'google', memoriser: true } }
+            : { status: 401, body: { error: 'Connexion expirée : recommencez.', code: 'NON_IDENTIFIE' } }),
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 200, body: { visiteur: { id: 'v1' } } },
+    });
+    api.auth.modeOAuth.lieu = () => lieu;
+    assert.deepEqual((await api.auth.fournisseursOAuth()).map((f) => f.nom), ['google', 'microsoft']);
+    assert.deepEqual(api.auth.modes(), ['invite', 'compte', 'oauth']);
+
+    // Départ : invité connecté transmis (il deviendra le compte), retour sur la même page
+    await api.auth.connecter({ pseudo: 'Tom' });
+    api.auth.connecter({ mode: 'oauth', fournisseur: 'google' });
+    await flush(); await flush();
+    const depart = fetch.calls.find((c) => c.path === '/api/visiteur/oauth/google/demarrer');
+    assert.deepEqual(depart.body, { retour: lieu.href, memoriser: true });
+    assert.equal(depart.headers.Authorization, 'Bearer nvv2.invite');
+    assert.equal(lieu.parti, 'https://accounts.google.com/o/oauth2/v2/auth?state=x');
+
+    // Retour du fournisseur sur la page (nouveau chargement)
+    assert.equal(await api.auth.retourConnexion(), null, 'pas de fragment : rien à faire');
+    lieu.hash = '#navinum-oauth=abc';
+    await api.launch(token);
+    const joueur = await api.auth.retourConnexion();
+    assert.equal(joueur.mode, 'oauth');
+    assert.equal(joueur.fournisseur, 'google');
+    assert.equal(joueur.rattache, true, 'partie lancée rattachée');
+    assert.equal(api.visiteurs.courant().appareil, 'nva1.g');
+
+    lieu.hash = '#navinum-oauth-erreur=CONNEXION_ANNULEE';
+    const annule = await api.auth.retourConnexion().catch((e) => e);
+    assert.equal(NavinumAPI.erreurs.decrire(annule).code, 'CONNEXION_ANNULEE');
+    lieu.hash = '#navinum-oauth=perime';
+    assert.equal(NavinumAPI.erreurs.decrire(await api.auth.retourConnexion().catch((e) => e)).code, 'NON_IDENTIFIE');
 });

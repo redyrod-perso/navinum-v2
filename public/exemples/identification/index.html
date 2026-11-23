@@ -46,6 +46,8 @@
             <button id="creer-compte">Créer un compte</button>
         </p>
         <p class="discret">Connecté en invité ? « Créer un compte » garde vos XP et médailles.</p>
+        <!-- Un bouton par fournisseur activé sur le serveur (Google, Microsoft, Facebook…) -->
+        <p id="fournisseurs"></p>
     </fieldset>
 
     <div class="joueur" id="joueur" hidden>
@@ -130,8 +132,21 @@
                 $('lancement').textContent = '';
                 afficherErreur(err); // lien expiré ou invalide
             }
+            // Retour d'une connexion Google / Microsoft / Facebook (après api.launch() pour rattacher la partie)
+            try {
+                await api.auth.retourConnexion();
+            } catch (err) {
+                afficherErreur(err); // connexion annulée ou expirée
+            }
             // Joueur déjà venu sur cet appareil : pseudo proposé
             $('pseudo').value = api.auth.joueur()?.pseudo ?? '';
+            // Boutons des fournisseurs OAuth activés ; un joueur connecté y lie le fournisseur choisi
+            for (const f of await api.auth.fournisseursOAuth().catch(() => [])) {
+                const bouton = document.createElement('button');
+                bouton.textContent = `Continuer avec ${f.libelle}`;
+                bouton.addEventListener('click', () => api.auth.connecter({ mode: 'oauth', fournisseur: f.nom, memoriser: !$('borne').checked }).catch(afficherErreur));
+                $('fournisseurs').append(bouton);
+            }
         })();
     </script>
 </body>

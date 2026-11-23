@@ -732,7 +732,8 @@ api.auth.modes();           // ['invite']
 |------|------|
 | `invite` | Disponible : visiteur invité à partir d'un pseudo, réutilisé sur l'appareil |
 | `compte` | Disponible : adresse e-mail + mot de passe (voir ci-dessous) |
-| `oauth`, `rfid` | À venir : erreur `MODE_INDISPONIBLE` en attendant |
+| `oauth` | Disponible : Google, Microsoft, Facebook… selon les fournisseurs activés sur le serveur |
+| `rfid` | À venir : erreur `MODE_INDISPONIBLE` en attendant |
 | personnalisé | `api.auth.ajouterMode(nom, async (options, api) => ({ id, pseudo, anonyme, token }))` |
 
 **Session (lib 0.8.0) :** le jeton expire après **30 minutes d'inactivité** et au plus **12 heures** après
@@ -769,6 +770,25 @@ Erreurs (module d'erreurs) : `IDENTIFIANTS_INVALIDES` (message identique que l'a
 8 caractères, adresse invalide). L'adresse n'apparaît jamais dans le profil public. Vérification d'adresse et
 « mot de passe oublié » par e-mail : quand l'envoi d'e-mails sera branché ; en attendant, l'admin définit un nouveau mot
 de passe (Admin › Visiteurs).
+
+### Connexion par Google, Microsoft, Facebook… (OAuth)
+
+```javascript
+await api.launch();                                     // d'abord, pour rattacher la partie au retour
+try {
+    await api.auth.retourConnexion();                   // au chargement : termine une connexion OAuth (sinon null)
+} catch (err) { afficherErreur(NavinumAPI.erreurs.decrire(err)); } // CONNEXION_ANNULEE, NON_IDENTIFIE…
+
+for (const f of await api.auth.fournisseursOAuth()) {   // seulement les fournisseurs activés sur le serveur
+    ajouterBouton(`Continuer avec ${f.libelle}`, () => api.auth.connecter({ mode: 'oauth', fournisseur: f.nom }));
+}
+```
+
+- La page est quittée vers le fournisseur puis rouverte (même adresse, lancement `?nv=` conservé). Le jeton
+  n'apparaît jamais dans l'URL : seulement un code d'échange à usage unique (2 min).
+- Un joueur **connecté** (invité ou compte) qui choisit un fournisseur se le **lie** : un compte peut réunir Google,
+  Microsoft et Facebook ; un invité devient un compte et garde ses XP et médailles.
+- Un compte existant n'est retrouvé par son adresse que si le fournisseur la garantit (Google).
 
 ### Intégrer l'authentification dans un nouvel interactif
 

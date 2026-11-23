@@ -7,6 +7,20 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.13.0] - 2026-11-24
+
+Connexion OAuth multi-fournisseurs (#4, partie 2).
+
+### Added
+- **Mode `oauth`** : `api.auth.connecter({ mode: 'oauth', fournisseur: 'google' | 'microsoft' | 'facebook' })`
+  (page quittée vers le fournisseur) et **`api.auth.retourConnexion()`** au chargement de la page (échange du code à
+  usage unique, rattachement de la partie). Un joueur connecté lie le fournisseur à son compte.
+- `api.auth.fournisseursOAuth()` : fournisseurs activés sur le serveur.
+- `api.visiteurs.fournisseursOAuth()`, `demarrerOAuth()`, `echangeOAuth()` ; code d'erreur `CONNEXION_ANNULEE`.
+- Exemple d'identification : boutons « Continuer avec … » et gestion du retour.
+
+---
+
 ## [0.12.0] - 2026-11-24
 
 Comptes en ligne (#4, partie 1).
