@@ -54,11 +54,9 @@
         <p><strong id="nom"></strong> <span class="discret" id="details"></span></p>
         <p id="rattachement" class="discret"></p>
         <p>
-            <button id="evenement">Envoyer un événement</button>
             <button id="pas-moi">Ce n'est pas moi</button>
             <button id="deconnecter">Se déconnecter</button>
         </p>
-        <p id="gains" class="discret"></p>
     </div>
 
     <script src="/build/navinum-api.js"></script>
@@ -89,10 +87,6 @@
         }
 
         api.auth.onChange(afficherJoueur);
-        api.gamification.onGains((gains) => {
-            const xp = gains.xp.reduce((total, gain) => total + gain.points, 0);
-            $('gains').textContent = `+${xp} XP, total ${gains.totalXp} XP` + (gains.medailles.length ? `, médaille : ${gains.medailles.map((m) => m.libelle).join(', ')}` : '');
-        });
 
         $('connecter').addEventListener('click', async () => {
             $('erreur').hidden = true;
@@ -116,11 +110,6 @@
         });
         $('pas-moi').addEventListener('click', () => { api.auth.oublier(); $('pseudo').value = ''; });
         $('deconnecter').addEventListener('click', () => api.auth.deconnecter());
-        $('evenement').addEventListener('click', async () => {
-            // Type déclaré dans le manifeste de l'interactif ; sans lancement Navinum : sans effet (null)
-            const gains = await api.gamification.evenement('exemple.clic', { score: 1 });
-            if (!gains) $('gains').textContent = 'Événement sans gain (mode autonome, joueur non rattaché ou aucune règle).';
-        });
 
         (async () => {
             try {
