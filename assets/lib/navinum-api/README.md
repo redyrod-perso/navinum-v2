@@ -841,10 +841,14 @@ const gains = await api.gamification.evenement('quiz.completed', { score: 8, tot
 // { xp: [{ typologie: 'Joueur', points: 80 }], medailles: [{ libelle: 'Sans faute', … }], totalXp: 240 }
 await api.gamification.demanderMedaille('Explorateur'); // médaille « attribuable » par l'interactif
 api.gamification.bilan();                            // { xp, medailles, totalXp } depuis l'ouverture de la page
+const medailles = await api.gamification.medailles(); // catalogue de l'interactif : [{ libelle, description, image,
+                                                     //   condition, unique, attribuable, obtenue, obtenueLe }]
 ```
 
 - `evenement()` est **jamais bloquant** : en mode autonome (sans `?nv=`), sans joueur identifié ou en cas d'erreur
   réseau, il rend `null` et le jeu continue. Chaque appel prolonge aussi la session du joueur.
+- `medailles()` : médailles de l'interactif (définies dans l'admin ou son manifeste), avec `obtenue` pour le joueur
+  connecté (null sans joueur) — de quoi afficher « à gagner » et « déjà gagnées ». Null en mode autonome.
 - `demanderMedaille()` lève les refus (`MEDAILLE_NON_ATTRIBUABLE`, `NON_IDENTIFIE`…, voir le module d'erreurs).
 
 ## Multijoueur

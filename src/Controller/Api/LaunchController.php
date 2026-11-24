@@ -21,6 +21,7 @@ use Symfony\Component\Routing\Attribute\Route;
  * - POST /api/launch/{token}/visiteur rattache le visiteur (Authorization: Bearer <jeton visiteur>)
  * - POST /api/launch/{token}/events  événement {type, payload} → consigné dans LogVisite,
  *                                    puis gamification (XP, médailles) renvoyée dans `gamification`
+ * - GET  /api/launch/{token}/medailles catalogue des médailles de l'interactif (obtenues ou non par le joueur)
  * - POST /api/launch/{token}/medailles médaille demandée par l'interactif {medaille} (visiteur rattaché requis,
  *                                    médaille listée dans `attribuables` des règles de l'interactif)
  *
@@ -127,6 +128,22 @@ final class LaunchController extends AbstractController
      * 200 : `{ medaille, nouvelle, totalXp }` (nouvelle = false si déjà obtenue : appel idempotent) ;
      * 401 NON_IDENTIFIE (aucun visiteur rattaché) ; 403 MEDAILLE_NON_ATTRIBUABLE ; 404 MEDAILLE_INCONNUE.
      */
+    /**
+     * Médailles de l'interactif lancé (catalogue à afficher au joueur) ; `obtenue` pour le joueur du jeton
+     * Bearer, à défaut le visiteur rattaché au lancement (null sans joueur identifié).
+     */
+    #[Route('/medailles', name: 'medailles', methods: ['GET'])]
+    public function medailles(string $token, Request $request): JsonResponse
+    {
+        $launchToken = $this->tokens->findOneByToken($token);
+        if ($error = $this->tokenError($launchToken)) {
+            return $error;
+        }
+        $visiteur = null !== VisiteurToken::bearer($request) ? $this->visiteurTokens->fromRequest($request) : $launchToken->getVisiteur();
+
+        return $this->json(['medailles' => $this->gamification->medaillesDe($launchToken->getInteractif(), $visiteur)]);
+    }
+
     #[Route('/medailles', name: 'medaille', methods: ['POST'])]
     public function medaille(string $token, Request $request): JsonResponse
     {

@@ -164,4 +164,34 @@ class GamificationTest extends WebTestCase
         $sansJoueur = $this->demander($anonyme, 'Sans faute '.$this->suffix);
         $this->assertSame([401, 'NON_IDENTIFIE'], [$sansJoueur['status'], $sansJoueur['body']['code']]);
     }
+
+    /** Catalogue des médailles de l'interactif pour les interactifs (obtenues ou non par le joueur). */
+    public function testCatalogueDesMedaillesDeLInteractif(): void
+    {
+        [$launch, $visiteurToken] = $this->partie();
+        $catalogue = function (?string $token = null): array {
+            $this->client->request('GET', "/api/launch/{$this->launchCourant}/medailles", server: $token ? ['HTTP_AUTHORIZATION' => 'Bearer '.$token] : []);
+            $this->assertResponseIsSuccessful();
+
+            return array_column(json_decode($this->client->getResponse()->getContent(), true)['medailles'], null, 'libelle');
+        };
+        $this->launchCourant = $launch;
+
+        $avant = $catalogue($visiteurToken);
+        $this->assertSame(['Explorateur '.$this->suffix, 'Sans faute '.$this->suffix], array_keys($avant), 'médailles citées par les règles ; inconnue et non citée absentes');
+        $this->assertTrue($avant['Explorateur '.$this->suffix]['attribuable']);
+        $this->assertFalse($avant['Sans faute '.$this->suffix]['obtenue']);
+
+        $this->evenement($launch, ['score' => 3, 'total' => 3]);
+        $apres = $catalogue($visiteurToken)['Sans faute '.$this->suffix];
+        $this->assertTrue($apres['obtenue']);
+        $this->assertNotNull($apres['obtenueLe']);
+
+        $this->suffix = bin2hex(random_bytes(3)); // autre interactif, autres médailles
+        [$anonyme] = $this->partie(false);
+        $this->launchCourant = $anonyme;
+        $this->assertNull(array_values($catalogue())[0]['obtenue'], 'sans joueur identifié : inconnu');
+    }
+
+    private ?string $launchCourant = null;
 }

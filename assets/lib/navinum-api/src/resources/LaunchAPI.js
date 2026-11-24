@@ -55,6 +55,8 @@ export const LAUNCH_TOKEN_PARAM = 'nv';
  *           Voir {@link LaunchAPI.subscribeConfig}.
  * @property {function(string): Promise<LaunchVisiteur|null>} identify - Rattache le visiteur
  *           (jeton `nvv1.…`) à ce lancement et met à jour `visiteur`. Voir {@link LaunchAPI#identify}.
+ * @property {function(): Promise<Array<Object>>} medailles - Catalogue des médailles de l'interactif (obtenues ou
+ *           non par le joueur). Voir {@link LaunchAPI#medailles}.
  * @property {function(string): Promise<MedailleObtenue>} demanderMedaille - Demande une médaille pour le
  *           visiteur de ce lancement. Voir {@link LaunchAPI#demanderMedaille}.
  */
@@ -235,6 +237,25 @@ export class LaunchAPI {
     }
 
     /**
+     * Catalogue des médailles de l'interactif lancé, pour les afficher au joueur.
+     *
+     * @param {string} token - Jeton de lancement
+     * @param {Object} [options={}]
+     * @param {string} [options.visiteurToken] - Joueur dont on veut savoir s'il a obtenu chaque médaille
+     * @returns {Promise<Array<{libelle: string, description: (string|null), image: (string|null), condition: (string|null),
+     *          unique: boolean, attribuable: boolean, obtenue: (boolean|null), obtenueLe: (string|null)}>>}
+     *          `obtenue` vaut null sans joueur identifié
+     *
+     * @example
+     * const medailles = await ctx.medailles();
+     * medailles.forEach(m => afficherMedaille(m.libelle, m.image, m.obtenue));
+     */
+    async medailles(token, options = {}) {
+        const res = await this.client.get(`${this.tokenPath(token)}/medailles`, LaunchAPI.bearer(options.visiteurToken));
+        return (res && res.medailles) || [];
+    }
+
+    /**
      * Demande une médaille pour le visiteur rattaché à ce lancement (ex. « Explorateur » quand le joueur
      * a tout visité). Anti-triche : seules les médailles déclarées `attribuables` dans les règles de
      * gamification de l'interactif sont accordées. Idempotent (médaille unique : une fois par visiteur ;
@@ -299,6 +320,7 @@ export class LaunchAPI {
                 { log: (...args) => this.client.config.log(...args) }
             ),
             demanderMedaille: (medaille) => this.demanderMedaille(effectiveToken, medaille, { visiteurToken: jetonJoueur() }),
+            medailles: () => this.medailles(effectiveToken, { visiteurToken: jetonJoueur() }),
             identify: async (visiteurToken) => {
                 const updated = await this.identify(effectiveToken, visiteurToken);
                 ctx.visiteur = updated?.visiteur ?? null;

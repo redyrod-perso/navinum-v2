@@ -7,6 +7,14 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.14.0] - 2026-11-24
+
+### Added
+- `api.gamification.medailles()` / `ctx.medailles()` / `api.launches.medailles()` : catalogue des médailles de
+  l'interactif lancé (`GET /api/launch/{jeton}/medailles`), avec `obtenue` et `obtenueLe` pour le joueur connecté.
+
+---
+
 ## [0.13.0] - 2026-11-24
 
 Connexion OAuth multi-fournisseurs (#4, partie 2).

@@ -828,3 +828,24 @@ test('auth oauth : départ vers le fournisseur (joueur connecté transmis), reto
     lieu.hash = '#navinum-oauth=perime';
     assert.equal(NavinumAPI.erreurs.decrire(await api.auth.retourConnexion().catch((e) => e)).code, 'NON_IDENTIFIE');
 });
+
+test('gamification.medailles : catalogue de l’interactif, obtenues pour le joueur connecté ; null en mode autonome', async () => {
+    const token = '5'.repeat(48);
+    const api = makeApi({
+        [`GET /api/launch/${token}`]: { status: 200, body: { interactif: { id: 'i' }, config: {}, visiteur: null, mercure: null } },
+        [`POST /api/launch/${token}/visiteur`]: { status: 200, body: { visiteur: { id: 'v1' } } },
+        [`GET /api/launch/${token}/medailles`]: (call) => ({ status: 200, body: { medailles: [
+            { libelle: 'Explorateur', attribuable: true, obtenue: call.headers.Authorization ? false : null },
+            { libelle: 'Sans faute', attribuable: false, obtenue: call.headers.Authorization ? true : null },
+        ] } }),
+        'POST /api/visiteur/invite': { status: 201, body: { visiteur: { id: 'v1', pseudo: 'Léa', anonyme: true }, token: 'nvv2.lea', expiresAt: new Date(Date.now() + 1800e3).toISOString(), appareil: 'nva1.lea' } },
+    });
+    assert.equal(await api.gamification.medailles(), null, 'mode autonome');
+
+    await api.launch(token);
+    assert.deepEqual((await api.gamification.medailles()).map((m) => m.obtenue), [null, null], 'sans joueur : inconnu');
+    await api.auth.connecter({ pseudo: 'Léa' });
+    const medailles = await api.gamification.medailles();
+    assert.equal(fetch.calls.at(-1).headers.Authorization, 'Bearer nvv2.lea');
+    assert.deepEqual(medailles.filter((m) => !m.obtenue).map((m) => m.libelle), ['Explorateur']);
+});

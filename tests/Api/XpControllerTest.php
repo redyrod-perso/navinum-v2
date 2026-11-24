@@ -6,10 +6,14 @@ use ApiPlatform\Symfony\Bundle\Test\ApiTestCase;
 use App\Entity\Typologie;
 use App\Entity\Visiteur;
 use App\Entity\Xp;
+use App\Tests\Traits\DatabaseTestTrait;
 use Symfony\Component\Uid\Uuid;
 
+/** Totaux d'XP de l'administration : réservés aux comptes administrateurs (espace admin). */
 class XpControllerTest extends ApiTestCase
 {
+    use DatabaseTestTrait;
+
     // Comportement explicite (défaut futur d'API Platform 5) : le noyau démarre avec chaque client de test
     protected static ?bool $alwaysBootKernel = true;
 
@@ -28,8 +32,9 @@ class XpControllerTest extends ApiTestCase
     public function testGetTotalWithoutVisiteurId(): void
     {
         $client = static::createClient();
+        $this->login($client);
 
-        $client->request('GET', '/api/xp/total');
+        $client->request('GET', '/admin/api/xp/total');
 
         $this->assertResponseStatusCodeSame(400);
         $this->assertJsonContains([
@@ -40,8 +45,9 @@ class XpControllerTest extends ApiTestCase
     public function testGetTotalWithInvalidUuid(): void
     {
         $client = static::createClient();
+        $this->login($client);
 
-        $client->request('GET', '/api/xp/total?visiteur_id=invalid-uuid');
+        $client->request('GET', '/admin/api/xp/total?visiteur_id=invalid-uuid');
 
         $this->assertResponseStatusCodeSame(400);
         $this->assertJsonContains([
@@ -52,6 +58,7 @@ class XpControllerTest extends ApiTestCase
     public function testGetTotalSuccess(): void
     {
         $client = static::createClient();
+        $this->login($client);
 
         // Get EntityManager from the client's container
         $em = $client->getContainer()->get('doctrine')->getManager();
@@ -80,7 +87,7 @@ class XpControllerTest extends ApiTestCase
 
         $em->flush();
 
-        $client->request('GET', '/api/xp/total?visiteur_id=' . $visiteur->getId());
+        $client->request('GET', '/admin/api/xp/total?visiteur_id=' . $visiteur->getId());
 
         $this->assertResponseIsSuccessful();
         $this->assertJsonContains([
@@ -93,6 +100,7 @@ class XpControllerTest extends ApiTestCase
     public function testGetTotalBestVisiteurSuccess(): void
     {
         $client = static::createClient();
+        $this->login($client);
         $em = static::getContainer()->get('doctrine')->getManager();
 
         // Créer deux visiteurs
@@ -129,7 +137,7 @@ class XpControllerTest extends ApiTestCase
 
         $em->flush();
 
-        $client->request('GET', '/api/xp/totalBestVisiteur');
+        $client->request('GET', '/admin/api/xp/totalBestVisiteur');
 
         $this->assertResponseIsSuccessful();
         $data = json_decode($client->getResponse()->getContent(), true);
@@ -143,10 +151,27 @@ class XpControllerTest extends ApiTestCase
     public function testGetTotalBestVisiteurWhenNoXp(): void
     {
         $client = static::createClient();
+        $this->login($client);
 
-        $client->request('GET', '/api/xp/totalBestVisiteur');
+        $client->request('GET', '/admin/api/xp/totalBestVisiteur');
 
         $this->assertResponseIsSuccessful();
         $this->assertJsonEquals([]);
+    }
+
+    /** Plus de totaux d'XP accessibles sans compte administrateur. */
+    public function testReserveAuxAdministrateurs(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/xp/totalBestVisiteur');
+        $this->assertResponseStatusCodeSame(404, 'ancienne adresse publique supprimée');
+
+        $client->request('GET', '/admin/api/xp/totalBestVisiteur');
+        $this->assertResponseRedirects();
+        $this->assertStringContainsString('/login', (string) $client->getResponse()->getHeaders(false)['location'][0]);
+
+        $this->login($client, \App\Entity\User::ROLE_ORGANISATEUR);
+        $client->request('GET', '/admin/api/xp/totalBestVisiteur');
+        $this->assertResponseStatusCodeSame(403);
     }
 }

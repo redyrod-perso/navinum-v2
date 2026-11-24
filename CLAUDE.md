@@ -631,6 +631,11 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
   aucune par défaut), idempotent (unique : une fois par visiteur ; sinon une fois par partie), tracé dans le
   `LogVisite` (`navinum.medaille`).
 - Le quiz affiche XP et médailles gagnés en fin de partie (#9).
+- **Catalogue des médailles pour les interactifs** : `GET /api/launch/{jeton}/medailles` → médailles rattachées à
+  l'interactif ou citées par ses règles (`medailles`, `attribuables`), avec `attribuable`, `obtenue`/`obtenueLe`
+  pour le joueur (Bearer, sinon visiteur rattaché ; null sans joueur). JS : `api.gamification.medailles()`.
+- Totaux d'XP hérités de la V1 : espace admin uniquement (`/admin/api/xp/total`, `/admin/api/xp/totalBestVisiteur`,
+  ROLE_ADMIN).
 - **Scores contrôlés par le serveur** (#57) : règle `scoreSession` (ex. `["quiz.completed"]`) — pour ces événements,
   `SessionScoreVerifier` reprend `score`, `total` (questions du thème d'après la configuration du lancement) et
   `victoire` de la session multijoueur (`payload.groupe`, `payload.joueur`), contrôlée point par point ; sans session

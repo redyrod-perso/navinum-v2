@@ -7,9 +7,15 @@ use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\IsGranted;
 use Symfony\Component\Uid\Uuid;
 
-#[Route('/api/xp', name: 'api_xp_')]
+/**
+ * Totaux d'XP pour l'administration (outils hérités de la V1) : espace admin, compte administrateur requis.
+ * Les interactifs passent par l'API de lancement et la librairie (`api.gamification`).
+ */
+#[Route('/admin/api/xp', name: 'admin_api_xp_')]
+#[IsGranted('ROLE_ADMIN')]
 class XpController extends AbstractController
 {
     public function __construct(
