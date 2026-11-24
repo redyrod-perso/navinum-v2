@@ -142,6 +142,52 @@ final class GamificationService
         ];
     }
 
+    /**
+     * Médailles d'un interactif, pour l'afficher au joueur : celles rattachées à l'interactif et celles que ses règles
+     * citent (règles de médaille, `attribuables`). Avec un visiteur : obtenue ou non, et depuis quand.
+     *
+     * @return list<array{libelle: string, description: ?string, image: ?string, condition: ?string, unique: bool,
+     *                    attribuable: bool, obtenue: ?bool, obtenueLe: ?string}>
+     */
+    public function medaillesDe(Interactif $interactif, ?Visiteur $visiteur): array
+    {
+        $regles = $interactif->getGamification() ?? [];
+        $attribuables = array_values(array_filter((array) ($regles['attribuables'] ?? []), 'is_string'));
+        $cites = array_merge($attribuables, array_map(
+            static fn ($r) => \is_array($r) ? (string) ($r['medaille'] ?? '') : '',
+            (array) ($regles['medailles'] ?? []),
+        ));
+
+        $repo = $this->em->getRepository(Medaille::class);
+        $medailles = [];
+        foreach ($repo->findBy(['interactif' => $interactif]) as $medaille) {
+            $medailles[$medaille->getLibelle()] = $medaille;
+        }
+        foreach (array_unique(array_filter($cites)) as $libelle) {
+            $medailles[$libelle] ??= $repo->findOneBy(['libelle' => $libelle]);
+        }
+        $medailles = array_filter($medailles);
+        ksort($medailles, \SORT_NATURAL | \SORT_FLAG_CASE);
+
+        $obtenues = [];
+        if (null !== $visiteur && [] !== $medailles) {
+            foreach ($this->em->getRepository(VisiteurMedaille::class)->findBy(['visiteur' => $visiteur, 'medaille' => array_values($medailles)], ['createdAt' => 'ASC']) as $vm) {
+                $obtenues[$vm->getMedaille()->getLibelle()] ??= $vm->getCreatedAt()->format(\DATE_ATOM);
+            }
+        }
+
+        return array_values(array_map(static fn (Medaille $m) => [
+            'libelle' => (string) $m->getLibelle(),
+            'description' => $m->getDescription(),
+            'image' => $m->getImage(),
+            'condition' => $m->getConditionObtention(),
+            'unique' => $m->isUnique(),
+            'attribuable' => \in_array($m->getLibelle(), $attribuables, true),
+            'obtenue' => null === $visiteur ? null : isset($obtenues[$m->getLibelle()]),
+            'obtenueLe' => $obtenues[$m->getLibelle()] ?? null,
+        ], $medailles));
+    }
+
     private function alreadyHas(Visiteur $visiteur, Medaille $medaille): bool
     {
         return null !== $this->em->getRepository(VisiteurMedaille::class)->findOneBy(['visiteur' => $visiteur, 'medaille' => $medaille]);

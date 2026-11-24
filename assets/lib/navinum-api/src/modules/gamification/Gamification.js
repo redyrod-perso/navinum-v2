@@ -78,6 +78,23 @@ export class Gamification {
     }
 
     /**
+     * Médailles de l'interactif (catalogue défini dans l'admin ou le manifeste), avec pour chacune `obtenue` par le
+     * joueur connecté : de quoi afficher « à gagner » et « déjà gagnées ».
+     *
+     * @returns {Promise<Array<{libelle: string, description: (string|null), image: (string|null), condition: (string|null),
+     *          unique: boolean, attribuable: boolean, obtenue: (boolean|null), obtenueLe: (string|null)}>|null>}
+     *          null en mode autonome (sans lancement Navinum)
+     *
+     * @example
+     * const medailles = await api.gamification.medailles();
+     * const aGagner = (medailles || []).filter(m => !m.obtenue);
+     */
+    async medailles() {
+        const ctx = this.api.contexte;
+        return ctx ? ctx.medailles() : null;
+    }
+
+    /**
      * Appelle `callback(gains)` à chaque gain (XP ou nouvelle médaille).
      * @param {function(Gains): void} callback
      * @returns {function(): void} Fonction de désabonnement
