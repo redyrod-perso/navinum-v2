@@ -29,6 +29,8 @@ security:
             # Jeton visiteur Bearer (tous modes de connexion) → ROLE_VISITEUR ; tolérant (voir VisiteurAuthenticator)
             custom_authenticators:
                 - App\Security\VisiteurAuthenticator
+                # Clé d'intégration Bearer nvk1.… (n8n…) → ROLE_INTEGRATION_<DROIT> ; stricte (#11)
+                - App\Security\IntegrationAuthenticator
             entry_point: App\Security\VisiteurAuthenticator
         main:
             lazy: true

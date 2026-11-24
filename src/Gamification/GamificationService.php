@@ -116,6 +116,20 @@ final class GamificationService
         if (!\is_array($attribuables) || !\in_array($libelle, $attribuables, true)) {
             throw new MedailleRefusee('MEDAILLE_NON_ATTRIBUABLE', \sprintf('La médaille « %s » ne peut pas être attribuée par cet interactif.', $libelle));
         }
+        return $this->attribuer($visiteur, $libelle, $connection);
+    }
+
+    /**
+     * Attribue une médaille existante à un visiteur (`VisiteurMedaille`), sans contrôle d'« attribuable » : réservé
+     * au serveur (médaille demandée par l'interactif après contrôle, clé d'intégration avec le droit « medailles »).
+     * Idempotent : médaille unique une fois par visiteur, autre médaille une fois par `$connection`.
+     *
+     * @return array{medaille: array{libelle: string, description: ?string, image: ?string}, nouvelle: bool, totalXp: int}
+     *
+     * @throws MedailleRefusee code MEDAILLE_INCONNUE
+     */
+    public function attribuer(Visiteur $visiteur, string $libelle, string $connection): array
+    {
         $medaille = $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $libelle]);
         if (null === $medaille) {
             throw new MedailleRefusee('MEDAILLE_INCONNUE', \sprintf('La médaille « %s » n\'existe pas.', $libelle));
