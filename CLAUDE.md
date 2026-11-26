@@ -651,8 +651,13 @@ n8n tourne sur le VPS (`https://n8n.srv802003.hstgr.cloud`, même réseau Docker
 - **Navinum → n8n** : webhooks sortants signés (HMAC), envoyés en asynchrone (Symfony Messenger + worker), déclarés dans
   une section « Intégrations » de l'admin. Événements : `medaille.obtenue`, `partie.terminee`, `visite.terminee`,
   `visiteur.inscrit`, `xp.palier`…
-- **n8n → Navinum** : API protégée par clé d'intégration (Bearer) pour agir (attribuer une médaille, remplir une config,
-  lire des statistiques). n8n peut ainsi porter des règles de gamification « intelligentes » en complément des règles JSON.
+- **n8n → Navinum (#11, fait)** : clés d'intégration (`CleIntegration`, secret `nvk1.…` affiché une seule fois,
+  empreinte SHA-256 en base, révocables) gérées dans **Admin › Réglages › Intégrations** ; droits par clé
+  (`statistiques`, `medailles`). `IntegrationAuthenticator` sur le pare-feu `api` (strict : clé inconnue ou révoquée →
+  401 `NON_IDENTIFIE`) → `IntegrationUser` (ROLE_INTEGRATION_<DROIT>). Routes : `GET /api/integration/moi`,
+  `GET /api/integration/statistiques`, `POST /api/integration/medailles {visiteur, medaille}` (via
+  `GamificationService::attribuer()`, sans doublon, origine `integration:<clé>`). À venir : écriture de configuration
+  en brouillon. n8n peut ainsi porter des règles de gamification « intelligentes » en complément des règles JSON.
 - Idées : mail de médaille ; **souvenir de visite** (récapitulatif, via `TemplateMail` / `SentMessage`, consentement
   `has_newsletter`) ; récapitulatif de groupe pour l'enseignant ; rapport hebdomadaire aux organisateurs ;
   **questions de quiz générées par IA** (validées par le JSON Schema, déposées en brouillon) ; traduction ; surveillance

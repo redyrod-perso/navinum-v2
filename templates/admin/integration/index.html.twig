@@ -1,0 +1,63 @@
+{% extends 'admin/layout.html.twig' %}
+{% block title %}Intégrations{% endblock %}
+{% block body %}
+<h1 class="h3 mb-3">Intégrations</h1>
+<p class="text-muted">Clés d'accès à l'API pour les outils externes (n8n…). Chaque clé n'a que les droits cochés ;
+    elle s'utilise dans l'en-tête <code>Authorization: Bearer &lt;secret&gt;</code>. Le secret n'est affiché qu'une fois.</p>
+
+{% if secret %}
+<div class="alert alert-warning">
+    <strong>Secret de la nouvelle clé</strong> (copiez-le maintenant, il ne sera plus affiché) :
+    <input type="text" class="form-control font-monospace mt-2" value="{{ secret }}" readonly onclick="this.select()">
+</div>
+{% endif %}
+{% if erreur %}<div class="alert alert-danger">{{ erreur }}</div>{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header">Nouvelle clé</div>
+    <div class="card-body">
+        <form method="post" class="row g-3 align-items-end">
+            <input type="hidden" name="_token" value="{{ csrf_token('cle_integration') }}">
+            <div class="col-md-4">
+                <label class="form-label" for="libelle">Nom</label>
+                <input class="form-control" id="libelle" name="libelle" maxlength="120" placeholder="ex. n8n production" required>
+            </div>
+            <div class="col-md-5">
+                {% for code, libelle in droits %}
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="checkbox" name="droits[]" value="{{ code }}" id="droit-{{ code }}">
+                    <label class="form-check-label" for="droit-{{ code }}">{{ libelle }}</label>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="col-md-3"><button class="btn btn-primary"><i class="bi bi-key"></i> Créer la clé</button></div>
+        </form>
+    </div>
+</div>
+
+<table class="table table-sm align-middle">
+    <thead><tr><th>Nom</th><th>Clé</th><th>Droits</th><th>Créée</th><th>Dernière utilisation</th><th>État</th><th></th></tr></thead>
+    <tbody>
+    {% for cle in cles %}
+        <tr class="{{ cle.revoked ? 'text-muted' }}">
+            <td>{{ cle.libelle }}</td>
+            <td><code>{{ cle.apercu }}</code></td>
+            <td>{% for d in cle.droits %}<span class="badge text-bg-secondary me-1">{{ droits[d] ?? d }}</span>{% endfor %}</td>
+            <td>{{ cle.createdAt|date('d/m/Y H:i') }}</td>
+            <td>{{ cle.lastUsedAt ? cle.lastUsedAt|date('d/m/Y H:i') : '—' }}</td>
+            <td>{% if cle.revoked %}<span class="badge text-bg-danger">Révoquée</span>{% else %}<span class="badge text-bg-success">Active</span>{% endif %}</td>
+            <td class="text-end">
+                {% if not cle.revoked %}
+                <form method="post" action="{{ path('admin_integration_revoquer', {id: cle.id}) }}" onsubmit="return confirm('Révoquer cette clé ? Les outils qui l’utilisent perdront l’accès.')">
+                    <input type="hidden" name="_token" value="{{ csrf_token('revoquer' ~ cle.id) }}">
+                    <button class="btn btn-sm btn-outline-danger">Révoquer</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="7" class="text-muted">Aucune clé.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
