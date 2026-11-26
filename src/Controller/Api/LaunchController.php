@@ -9,6 +9,7 @@ use App\Gamification\SessionScoreVerifier;
 use App\Repository\LaunchTokenRepository;
 use App\Service\LaunchService;
 use App\Service\VisiteurToken;
+use App\Webhook\Webhooks;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -36,6 +37,7 @@ final class LaunchController extends AbstractController
         private readonly VisiteurToken $visiteurTokens,
         private readonly GamificationService $gamification,
         private readonly SessionScoreVerifier $scores,
+        private readonly Webhooks $webhooks,
     ) {
     }
 
@@ -114,6 +116,19 @@ final class LaunchController extends AbstractController
             $payload,
             'launch:'.substr($launchToken->getToken(), 0, 16),
         );
+
+        // Webhook « partie.terminee » (#10) : fin de partie, avec le score contrôlé et les gains
+        if (str_ends_with($type, '.completed')) {
+            $this->webhooks->publier('partie.terminee', [
+                'evenement' => $type,
+                'interactif' => $launchToken->getInteractif()->getLibelle(),
+                'parcours' => $launchToken->getParcoursInteractif()?->getParcours()?->getLibelle(),
+                'exposition' => $launchToken->getExposition()?->getLibelle(),
+                'donnees' => $payload,
+                'visiteur' => Webhooks::visiteur($rattache ? $launchToken->getVisiteur() : null),
+                'gains' => $gamification,
+            ]);
+        }
 
         return $this->json([
             'accepted' => true,

@@ -4,6 +4,7 @@ namespace App\Service;
 
 use App\Entity\Visiteur;
 use App\Repository\VisiteurRepository;
+use App\Webhook\Webhooks;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Component\PasswordHasher\Hasher\PasswordHasherFactoryInterface;
 use Symfony\Component\PasswordHasher\PasswordHasherInterface;
@@ -29,6 +30,7 @@ final class CompteVisiteur
         private readonly EntityManagerInterface $em,
         private readonly VisiteurRepository $visiteurs,
         PasswordHasherFactoryInterface $hashers,
+        private readonly Webhooks $webhooks,
     ) {
         $this->hasher = $hashers->getPasswordHasher('visiteur');
     }
@@ -67,6 +69,7 @@ final class CompteVisiteur
             ->setHasNewsletter($newsletter);
         $this->em->persist($visiteur);
         $this->em->flush();
+        $this->webhooks->publier('visiteur.inscrit', ['visiteur' => Webhooks::visiteur($visiteur), 'mode' => 'compte', 'depuisInvite' => $visiteur === $invite]);
 
         return $visiteur;
     }

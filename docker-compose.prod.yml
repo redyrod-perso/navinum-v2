@@ -34,6 +34,20 @@ services:
       - navinum_network
       - root_default
 
+  # Worker Messenger (#10) : mêmes réglages de production que l'application
+  worker:
+    build:
+      args:
+        APP_ENV: prod
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: "0"
+      FRANKENPHP_WORKER_WATCH: ""
+    networks:
+      - navinum_network
+      # Joindre n8n et les autres services du VPS (webhooks internes)
+      - root_default
+
 networks:
   root_default:
     external: true

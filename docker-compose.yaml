@@ -65,6 +65,21 @@ services:
             retries: 3
             start_period: 60s
 
+    # Worker Messenger (#10) : envoie les webhooks (et les e-mails) en arrière-plan, avec réessais.
+    # Même image et même code que l'application ; redémarré au déploiement comme elle.
+    worker:
+        extends:
+            service: app
+        container_name: navinum_worker
+        command: ["php", "bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=256M", "-v"]
+        ports: !reset []
+        labels: !reset []
+        healthcheck:
+            disable: true
+        depends_on:
+            database:
+                condition: service_healthy
+
 volumes:
     database_data:
         driver: local

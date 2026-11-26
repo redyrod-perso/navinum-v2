@@ -60,4 +60,80 @@
     {% endfor %}
     </tbody>
 </table>
+
+<h2 class="h4 mt-5">Webhooks sortants</h2>
+<p class="text-muted">Navinum envoie ses événements (médaille obtenue, partie terminée, visiteur inscrit) à ces adresses,
+    en arrière-plan, avec réessais. Chaque envoi est signé : en-tête <code>X-Navinum-Signature: sha256=…</code> =
+    HMAC-SHA256 de <code>&lt;X-Navinum-Horodatage&gt;.&lt;corps&gt;</code> avec le secret du webhook.</p>
+
+<div class="card mb-4">
+    <div class="card-header">Nouveau webhook</div>
+    <div class="card-body">
+        <form method="post" action="{{ path('admin_integration_webhook_creer') }}" class="row g-3 align-items-end">
+            <input type="hidden" name="_token" value="{{ csrf_token('webhook') }}">
+            <div class="col-md-3">
+                <label class="form-label" for="wh-libelle">Nom</label>
+                <input class="form-control" id="wh-libelle" name="libelle" maxlength="120" placeholder="ex. n8n médailles" required>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label" for="wh-url">Adresse (URL du webhook n8n)</label>
+                <input class="form-control" id="wh-url" name="url" type="url" placeholder="http://n8n:5678/webhook/…" required>
+            </div>
+            <div class="col-md-3">
+                {% for code, libelle in evenements %}
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="evenements[]" value="{{ code }}" id="ev-{{ code }}">
+                    <label class="form-check-label" for="ev-{{ code }}">{{ libelle }} <code class="small">{{ code }}</code></label>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="col-md-2"><button class="btn btn-primary">Créer le webhook</button></div>
+        </form>
+    </div>
+</div>
+
+<table class="table table-sm align-middle">
+    <thead><tr><th>Nom</th><th>Adresse</th><th>Événements</th><th>Secret</th><th>État</th><th></th></tr></thead>
+    <tbody>
+    {% for webhook in webhooks %}
+        <tr class="{{ not webhook.actif ? 'text-muted' }}">
+            <td>{{ webhook.libelle }}</td>
+            <td class="small text-break">{{ webhook.url }}</td>
+            <td>{% for e in webhook.evenements %}<code class="small me-1">{{ e }}</code>{% endfor %}</td>
+            <td><details><summary class="small">Afficher</summary><code class="small text-break">{{ webhook.secret }}</code></details></td>
+            <td>{% if webhook.actif %}<span class="badge text-bg-success">Actif</span>{% else %}<span class="badge text-bg-secondary">Désactivé</span>{% endif %}</td>
+            <td class="text-end text-nowrap">
+                {% for action, libelle in {tester: 'Tester', (webhook.actif ? 'desactiver' : 'activer'): (webhook.actif ? 'Désactiver' : 'Activer'), supprimer: 'Supprimer'} %}
+                <form class="d-inline" method="post" action="{{ path('admin_integration_webhook_action', {id: webhook.id, action: action}) }}"
+                      {% if action == 'supprimer' %}onsubmit="return confirm('Supprimer ce webhook et son journal ?')"{% endif %}>
+                    <input type="hidden" name="_token" value="{{ csrf_token('webhook' ~ webhook.id) }}">
+                    <button class="btn btn-sm {{ action == 'supprimer' ? 'btn-outline-danger' : 'btn-outline-secondary' }}">{{ libelle }}</button>
+                </form>
+                {% endfor %}
+            </td>
+        </tr>
+    {% else %}
+        <tr><td colspan="6" class="text-muted">Aucun webhook.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<h3 class="h5 mt-4">Derniers envois</h3>
+<table class="table table-sm small">
+    <thead><tr><th>Date</th><th>Webhook</th><th>Événement</th><th>Statut</th><th>Tentatives</th><th>Réponse</th></tr></thead>
+    <tbody>
+    {% for envoi in envois %}
+        <tr>
+            <td>{{ envoi.createdAt|date('d/m/Y H:i:s') }}</td>
+            <td>{{ envoi.webhook.libelle }}</td>
+            <td><code>{{ envoi.evenement }}</code></td>
+            <td>{% set c = {succes: 'success', echec: 'danger', en_attente: 'warning'} %}<span class="badge text-bg-{{ c[envoi.statut] }}">{{ envoi.statut|replace({'_': ' '}) }}</span></td>
+            <td>{{ envoi.tentatives }}</td>
+            <td>{{ envoi.codeHttp ?? '' }} {{ envoi.erreur ?? '' }}</td>
+        </tr>
+    {% else %}
+        <tr><td colspan="6" class="text-muted">Aucun envoi.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
 {% endblock %}
