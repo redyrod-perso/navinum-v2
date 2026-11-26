@@ -648,9 +648,18 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 
 n8n tourne sur le VPS (`https://n8n.srv802003.hstgr.cloud`, même réseau Docker que Navinum : appels internes).
 
-- **Navinum → n8n** : webhooks sortants signés (HMAC), envoyés en asynchrone (Symfony Messenger + worker), déclarés dans
-  une section « Intégrations » de l'admin. Événements : `medaille.obtenue`, `partie.terminee`, `visite.terminee`,
-  `visiteur.inscrit`, `xp.palier`…
+- **Navinum → n8n (#10, fait)** : webhooks sortants (`Webhook`, journal `WebhookEnvoi`) déclarés dans **Admin ›
+  Réglages › Intégrations** (adresse http(s), événements cochés, secret `whsec_…`, test, activer/désactiver, journal
+  des 20 derniers envois). Événements : `medaille.obtenue` (règle, interactif ou intégration), `partie.terminee` (type
+  `*.completed`, score contrôlé et gains), `visiteur.inscrit` (compte e-mail ou OAuth) ; données visiteur : id, pseudo,
+  compte, email, emailVerifie, **newsletter** (consentement à respecter par le destinataire). Envoi **asynchrone** :
+  `App\Webhook\Webhooks::publier()` → message `EnvoyerWebhook` (transport `async`, doctrine) → conteneur **`worker`**
+  (`messenger:consume async`, même image, défini dans `docker-compose.yaml`, réglages prod dans `docker-compose.prod.yml`)
+  → POST JSON `{id, evenement, date, donnees}` signé : `X-Navinum-Signature: sha256=` HMAC-SHA256 de
+  `<X-Navinum-Horodatage>.<corps>`. Réessais Messenger (3, délai doublé ; délais relus toutes les 60 s), puis statut
+  « échec » (WebhookEchecSubscriber) et file `failed`. Tests : transport `in-memory://` (when@test). À venir :
+  `visite.terminee`, `xp.palier`. **Déploiement** : le worker se redémarre avec l'application
+  (`docker restart navinum_app navinum_worker`).
 - **n8n → Navinum (#11, fait)** : clés d'intégration (`CleIntegration`, secret `nvk1.…` affiché une seule fois,
   empreinte SHA-256 en base, révocables) gérées dans **Admin › Réglages › Intégrations** ; droits par clé
   (`statistiques`, `medailles`). `IntegrationAuthenticator` sur le pare-feu `api` (strict : clé inconnue ou révoquée →

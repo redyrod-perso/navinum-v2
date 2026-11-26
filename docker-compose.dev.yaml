@@ -8,6 +8,11 @@ services:
             # Le worker FrankenPHP redémarre automatiquement quand le code change
             FRANKENPHP_WORKER_WATCH: watch
 
+    # Worker Messenger (#10) : mêmes variables que l'application en local
+    worker:
+        env_file:
+            - .env.local
+
     # n8n local FACULTATIF (#16) pour développer et tester les workflows avant la production.
     # Même version que sur le VPS. Démarrage : docker compose -f docker-compose.yaml -f docker-compose.dev.yaml --profile n8n up -d
     # Interface : http://localhost:5678 ; depuis n8n, Navinum répond sur http://app (réseau Docker interne).

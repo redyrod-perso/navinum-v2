@@ -25,5 +25,13 @@ framework:
             Symfony\Component\Notifier\Message\ChatMessage: async
             Symfony\Component\Notifier\Message\SmsMessage: async
 
-            # Route your messages to the transports
-            # 'App\Message\YourMessage': async
+            # Webhooks sortants (#10) : envoyés par le worker, réessayés (stratégie du transport async)
+            App\Message\EnvoyerWebhook: async
+
+# Tests : file en mémoire (les messages — webhooks… — sont inspectés et traités à la main), quel que soit
+# MESSENGER_TRANSPORT_DSN de l'environnement
+when@test:
+    framework:
+        messenger:
+            transports:
+                async: 'in-memory://'

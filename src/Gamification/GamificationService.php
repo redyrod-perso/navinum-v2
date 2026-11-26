@@ -9,6 +9,7 @@ use App\Entity\Visiteur;
 use App\Entity\VisiteurMedaille;
 use App\Entity\Xp;
 use App\Service\XpService;
+use App\Webhook\Webhooks;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 
@@ -27,7 +28,19 @@ final class GamificationService
         private readonly GamificationEngine $engine,
         private readonly XpService $xpService,
         private readonly LoggerInterface $logger,
+        private readonly Webhooks $webhooks,
     ) {
+    }
+
+    /** Webhook `medaille.obtenue` (#10) ; `source` : regle, interactif ou integration. */
+    private function publierMedaille(Visiteur $visiteur, Medaille $medaille, string $source, ?Interactif $interactif): void
+    {
+        $this->webhooks->publier('medaille.obtenue', [
+            'medaille' => ['libelle' => $medaille->getLibelle(), 'description' => $medaille->getDescription(), 'image' => $medaille->getImage()],
+            'visiteur' => Webhooks::visiteur($visiteur),
+            'interactif' => $interactif?->getLibelle(),
+            'source' => $source,
+        ]);
     }
 
     /**
@@ -52,6 +65,7 @@ final class GamificationService
         }
 
         $medailles = [];
+        $obtenues = [];
         foreach ($awards['medailles'] as $libelle) {
             $medaille = $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $libelle]);
             if (null === $medaille) {
@@ -70,9 +84,13 @@ final class GamificationService
                 'description' => $medaille->getDescription(),
                 'image' => $medaille->getImage(),
             ];
+            $obtenues[] = $medaille;
         }
 
         $this->em->flush();
+        foreach ($obtenues as $medaille) {
+            $this->publierMedaille($visiteur, $medaille, 'regle', $interactif);
+        }
 
         return [
             'xp' => $xp,
@@ -116,7 +134,7 @@ final class GamificationService
         if (!\is_array($attribuables) || !\in_array($libelle, $attribuables, true)) {
             throw new MedailleRefusee('MEDAILLE_NON_ATTRIBUABLE', \sprintf('La médaille « %s » ne peut pas être attribuée par cet interactif.', $libelle));
         }
-        return $this->attribuer($visiteur, $libelle, $connection);
+        return $this->attribuer($visiteur, $libelle, $connection, 'interactif', $interactif);
     }
 
     /**
@@ -128,7 +146,7 @@ final class GamificationService
      *
      * @throws MedailleRefusee code MEDAILLE_INCONNUE
      */
-    public function attribuer(Visiteur $visiteur, string $libelle, string $connection): array
+    public function attribuer(Visiteur $visiteur, string $libelle, string $connection, string $source = 'integration', ?Interactif $interactif = null): array
     {
         $medaille = $this->em->getRepository(Medaille::class)->findOneBy(['libelle' => $libelle]);
         if (null === $medaille) {
@@ -143,6 +161,7 @@ final class GamificationService
         if (null === $deja) {
             $this->em->persist((new VisiteurMedaille())->setVisiteur($visiteur)->setMedaille($medaille)->setConnection($connection));
             $this->em->flush();
+            $this->publierMedaille($visiteur, $medaille, $source, $interactif);
         }
 
         return [

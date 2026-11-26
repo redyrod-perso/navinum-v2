@@ -7,6 +7,7 @@ use App\Entity\VisiteurIdentite;
 use App\Repository\VisiteurRepository;
 use App\Service\CompteVisiteur;
 use App\Service\VisiteurToken;
+use App\Webhook\Webhooks;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
@@ -23,6 +24,7 @@ final class ConnexionOAuth
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly VisiteurRepository $visiteurs,
+        private readonly Webhooks $webhooks,
     ) {
     }
 
@@ -35,7 +37,8 @@ final class ConnexionOAuth
 
         $parEmail = $identite->emailVerifie && null !== $identite->email ? $this->visiteurs->findOneBy(['email' => $identite->email]) : null;
         $visiteur = $connecte ?? $parEmail ?? new Visiteur();
-        if (CompteVisiteur::TYPE !== $visiteur->getType()) {
+        $inscription = CompteVisiteur::TYPE !== $visiteur->getType();
+        if ($inscription) {
             $pseudo = VisiteurToken::pseudo($visiteur) ?: ($identite->nom ?: (null !== $identite->email ? strstr($identite->email, '@', true) : 'Visiteur'));
             $visiteur->setPseudoSon(mb_substr((string) $pseudo, 0, 40))->setIsAnonyme(false)->setType(CompteVisiteur::TYPE);
             $visiteur->setHasNewsletter($visiteur->getHasNewsletter() ?? false);
@@ -49,6 +52,9 @@ final class ConnexionOAuth
         $this->em->persist($visiteur);
         $this->em->persist(new VisiteurIdentite($visiteur, $fournisseur, $identite->sujet));
         $this->em->flush();
+        if ($inscription) {
+            $this->webhooks->publier('visiteur.inscrit', ['visiteur' => Webhooks::visiteur($visiteur), 'mode' => 'oauth:'.$fournisseur, 'depuisInvite' => $visiteur === $connecte]);
+        }
 
         return $visiteur;
     }
