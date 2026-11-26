@@ -657,7 +657,10 @@ n8n tourne sur le VPS (`https://n8n.srv802003.hstgr.cloud`, même réseau Docker
   `has_newsletter`) ; récapitulatif de groupe pour l'enseignant ; rapport hebdomadaire aux organisateurs ;
   **questions de quiz générées par IA** (validées par le JSON Schema, déposées en brouillon) ; traduction ; surveillance
   et alertes.
-- Dev : prévoir un n8n local optionnel dans `docker-compose.dev.yaml` (règle « même stack partout »).
+- **Dev : n8n local facultatif (#16)** : service `n8n` au profil Compose `n8n` dans `docker-compose.dev.yaml`, même
+  version que le VPS (2.44.6) ; `docker compose -f docker-compose.yaml -f docker-compose.dev.yaml --profile n8n up -d`,
+  interface http://localhost:5678. En local comme en prod, n8n joint Navinum à `http://app` (réseau Docker interne).
+  Workflows versionnés en JSON sans secret dans `n8n/workflows/` (voir `n8n/README.md`).
 
 ### Interactifs intelligents (IA)
 

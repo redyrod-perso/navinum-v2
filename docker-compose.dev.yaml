@@ -7,3 +7,34 @@ services:
         environment:
             # Le worker FrankenPHP redémarre automatiquement quand le code change
             FRANKENPHP_WORKER_WATCH: watch
+
+    # n8n local FACULTATIF (#16) pour développer et tester les workflows avant la production.
+    # Même version que sur le VPS. Démarrage : docker compose -f docker-compose.yaml -f docker-compose.dev.yaml --profile n8n up -d
+    # Interface : http://localhost:5678 ; depuis n8n, Navinum répond sur http://app (réseau Docker interne).
+    n8n:
+        image: docker.n8n.io/n8nio/n8n:2.44.6
+        container_name: navinum_n8n
+        profiles: [n8n]
+        restart: unless-stopped
+        ports:
+            - "5678:5678"
+        environment:
+            N8N_HOST: localhost
+            N8N_PORT: 5678
+            N8N_PROTOCOL: http
+            WEBHOOK_URL: http://localhost:5678/
+            GENERIC_TIMEZONE: Europe/Paris
+            TZ: Europe/Paris
+            N8N_SECURE_COOKIE: "false"
+            N8N_DIAGNOSTICS_ENABLED: "false"
+            N8N_PERSONALIZATION_ENABLED: "false"
+        volumes:
+            - n8n_data:/home/node/.n8n
+            # Workflows versionnés du dépôt (import : n8n import:workflow --separate --input=/workflows)
+            - ./n8n/workflows:/workflows:ro
+        networks:
+            - navinum_network
+
+volumes:
+    n8n_data:
+        driver: local
