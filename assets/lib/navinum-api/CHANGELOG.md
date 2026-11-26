@@ -7,6 +7,20 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [0.15.0] - 2026-11-26
+
+E-mails des comptes visiteurs (#71).
+
+### Added
+- `api.auth.motDePasseOublie(email)` : lien de réinitialisation envoyé par Navinum (réponse identique que le compte
+  existe ou non).
+- `api.auth.reinitialiserMotDePasse(jeton, motDePasse)` : pour un interactif qui gère lui-même la page du lien.
+- `api.auth.renvoyerVerification()` : renvoie le lien de vérification de l'adresse du compte connecté.
+- `api.visiteurs.motDePasseOublie()`, `reinitialiserMotDePasse()`, `verifierEmail()`, `renvoyerVerification()` ;
+  code d'erreur `LIEN_COMPTE_INVALIDE`.
+
+---
+
 ## [0.14.0] - 2026-11-24
 
 ### Added

@@ -7,11 +7,26 @@ services:
         environment:
             # Le worker FrankenPHP redémarre automatiquement quand le code change
             FRANKENPHP_WORKER_WATCH: watch
+            # E-mails (#71) : jamais d'envoi réel en local, tout arrive dans Mailpit (http://localhost:8025)
+            MAILER_DSN: smtp://mailpit:1025
 
     # Worker Messenger (#10) : mêmes variables que l'application en local
     worker:
         env_file:
             - .env.local
+        environment:
+            MAILER_DSN: smtp://mailpit:1025
+
+    # Boîte de réception locale (#71) : attrape tous les e-mails envoyés en développement.
+    # Interface : http://localhost:8025
+    mailpit:
+        image: axllent/mailpit:v1.27
+        container_name: navinum_mailpit
+        restart: unless-stopped
+        ports:
+            - "8025:8025"
+        networks:
+            - navinum_network
 
     # n8n local FACULTATIF (#16) pour développer et tester les workflows avant la production.
     # Même version que sur le VPS. Démarrage : docker compose -f docker-compose.yaml -f docker-compose.dev.yaml --profile n8n up -d

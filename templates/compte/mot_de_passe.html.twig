@@ -1,0 +1,22 @@
+{% extends 'compte/_layout.html.twig' %}
+{% block title %}Nouveau mot de passe{% endblock %}
+{% block contenu %}
+    {% if etat == 'change' %}
+        <h1 class="ok">Mot de passe changé ✓</h1>
+        <p>Vous avez été déconnecté de tous vos appareils. Reconnectez-vous dans l'interactif avec votre nouveau mot de passe.</p>
+    {% elseif etat == 'invalide' %}
+        <h1>Lien plus valable</h1>
+        <p>Ce lien a expiré (1 heure) ou a déjà servi. Refaites une demande « Mot de passe oublié » depuis l'interactif.</p>
+    {% else %}
+        <h1>Nouveau mot de passe</h1>
+        {% if erreur %}<p class="erreur" role="alert">{{ erreur }}</p>{% endif %}
+        <form method="post">
+            <label for="motDePasse">Nouveau mot de passe</label>
+            <input type="password" id="motDePasse" name="motDePasse" minlength="{{ minimum }}" autocomplete="new-password" required autofocus>
+            <p class="aide">{{ minimum }} caractères au moins.</p>
+            <label for="confirmation">Confirmez-le</label>
+            <input type="password" id="confirmation" name="confirmation" minlength="{{ minimum }}" autocomplete="new-password" required>
+            <button type="submit">Enregistrer</button>
+        </form>
+    {% endif %}
+{% endblock %}

@@ -56,6 +56,7 @@ export const CODES = Object.freeze({
     MEDAILLE_INCONNUE: { titre: 'Médaille inconnue', message: 'Cette médaille n’existe pas.', reessayable: false, action: ACTIONS.AUCUNE },
     EMAIL_DEJA_UTILISE: { titre: 'Adresse déjà utilisée', message: 'Un compte existe déjà avec cette adresse : connectez-vous.', reessayable: false, action: ACTIONS.SE_RECONNECTER },
     IDENTIFIANTS_INVALIDES: { titre: 'Connexion impossible', message: 'Adresse e-mail ou mot de passe incorrect.', reessayable: false, action: ACTIONS.CORRIGER },
+    LIEN_COMPTE_INVALIDE: { titre: 'Lien plus valable', message: 'Ce lien a expiré ou a déjà servi : demandez-en un nouveau.', reessayable: false, action: ACTIONS.AUCUNE },
     TROP_DE_TENTATIVES: { titre: 'Trop de tentatives', message: 'Trop de tentatives : réessayez dans quelques minutes.', reessayable: true, action: ACTIONS.ATTENDRE },
     CONNEXION_ANNULEE: { titre: 'Connexion annulée', message: 'La connexion a été annulée.', reessayable: true, action: ACTIONS.REESSAYER },
     MODE_INDISPONIBLE: { titre: 'Connexion indisponible', message: 'Ce mode de connexion n’est pas encore disponible.', reessayable: false, action: ACTIONS.AUCUNE },

@@ -17,7 +17,8 @@ use Symfony\Component\PasswordHasher\PasswordHasherInterface;
  * - Mot de passe : 8 caractères au moins, haché (`visiteur` dans security.password_hashers), stocké dans
  *   `password_son`.
  * - Consentement newsletter explicite (`has_newsletter`, faux par défaut).
- * - Vérification de l'adresse : `emailVerifieAt`, renseignée quand l'envoi d'e-mails sera branché.
+ * - Vérification de l'adresse (#71) : `emailVerifieAt`, renseignée par le lien envoyé par e-mail (EmailsCompte).
+ * - Mot de passe oublié (#71) : lien à usage unique ; le nouveau mot de passe révoque toutes les sessions.
  */
 final class CompteVisiteur
 {
@@ -74,6 +75,14 @@ final class CompteVisiteur
         return $visiteur;
     }
 
+    /** Compte actif ayant cette adresse, ou null. */
+    public function compteParEmail(string $email): ?Visiteur
+    {
+        $visiteur = $this->visiteurs->findOneBy(['email' => mb_strtolower(trim($email))]);
+
+        return null !== $visiteur && self::TYPE === $visiteur->getType() && $visiteur->isActive() ? $visiteur : null;
+    }
+
     /** Visiteur dont l'adresse et le mot de passe correspondent, ou null (message générique côté API). */
     public function authentifier(string $email, string $motDePasse): ?Visiteur
     {
@@ -95,10 +104,33 @@ final class CompteVisiteur
         return $visiteur;
     }
 
-    /** Nouveau mot de passe défini par l'administration (« mot de passe oublié » sans e-mail). */
+    /** Lien de vérification suivi : l'adresse est confirmée (idempotent). */
+    public function confirmerEmail(Visiteur $visiteur): void
+    {
+        if (null === $visiteur->getEmailVerifieAt()) {
+            $visiteur->setEmailVerifieAt(new \DateTimeImmutable());
+            $this->em->flush();
+        }
+    }
+
+    /**
+     * Nouveau mot de passe choisi depuis le lien « mot de passe oublié » : toutes les sessions du compte sont
+     * révoquées (appareils) et l'adresse est tenue pour vérifiée (le visiteur a reçu le lien).
+     *
+     * @throws CompteRefuse code VALIDATION
+     */
+    public function reinitialiserMotDePasse(Visiteur $visiteur, string $motDePasse, VisiteurToken $tokens): void
+    {
+        $this->changerMotDePasse($visiteur, $motDePasse);
+        $tokens->revoquerTout($visiteur);
+        $visiteur->setEmailVerifieAt($visiteur->getEmailVerifieAt() ?? new \DateTimeImmutable());
+        $this->em->flush();
+    }
+
+    /** Nouveau mot de passe défini par l'administration ou par le visiteur (lien « mot de passe oublié »). */
     public function changerMotDePasse(Visiteur $visiteur, string $motDePasse): void
     {
-        if (mb_strlen($motDePasse) < self::MOT_DE_PASSE_MIN) {
+        if (mb_strlen($motDePasse) < self::MOT_DE_PASSE_MIN || \strlen($motDePasse) > 4096) {
             throw new CompteRefuse('VALIDATION', \sprintf('Le mot de passe doit faire au moins %d caractères.', self::MOT_DE_PASSE_MIN));
         }
         $visiteur->setPasswordSon($this->hasher->hash($motDePasse));

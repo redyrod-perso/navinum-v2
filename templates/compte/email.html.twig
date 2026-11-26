@@ -1,0 +1,11 @@
+{% extends 'compte/_layout.html.twig' %}
+{% block title %}Adresse e-mail{% endblock %}
+{% block contenu %}
+    {% if ok %}
+        <h1 class="ok">Adresse confirmée ✓</h1>
+        <p>Merci ! Votre adresse e-mail est vérifiée. Vous pouvez fermer cette page et reprendre votre visite.</p>
+    {% else %}
+        <h1>Lien plus valable</h1>
+        <p>Ce lien de confirmation a expiré ou ne correspond plus à votre compte. Reconnectez-vous dans l'interactif : un nouveau lien vous sera envoyé.</p>
+    {% endif %}
+{% endblock %}

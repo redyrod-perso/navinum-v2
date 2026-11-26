@@ -5,6 +5,8 @@ namespace App\Controller\Api;
 use App\Entity\Visiteur;
 use App\Service\CompteRefuse;
 use App\Service\CompteVisiteur;
+use App\Service\EmailsCompte;
+use App\Service\LienCompte;
 use App\Service\VisiteurToken;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -28,8 +30,16 @@ use Symfony\Component\Routing\Attribute\Route;
  *                                  devient un compte, mêmes XP et médailles) → profil + jeton (+ appareil)
  * - POST /api/visiteur/connexion   {email, motDePasse}  → profil + jeton + appareil
  *
+ * E-mails de compte (#71, envoyés en arrière-plan ; liens vers les pages /compte/… de Navinum) :
+ * - inscription, puis connexion d'un compte non vérifié : lien de vérification de l'adresse
+ * - POST /api/visiteur/email/renvoyer (Bearer d'un compte) → 202, renvoie le lien de vérification
+ * - POST /api/visiteur/email/verifier {jeton}           → 200 {emailVerifie: true}
+ * - POST /api/visiteur/mot-de-passe/oublie {email}      → 202, **même réponse que le compte existe ou non**
+ * - POST /api/visiteur/mot-de-passe/reinitialiser {jeton, motDePasse} → 200 ; toutes les sessions révoquées
+ *
  * Refus : 401 `NON_IDENTIFIE` (jeton expiré, révoqué ou invalide ; secret d'appareil ou pseudo incorrect),
- * 401 `IDENTIFIANTS_INVALIDES`, 409 `EMAIL_DEJA_UTILISE`, 429 `TROP_DE_TENTATIVES`, 400 `VALIDATION`.
+ * 401 `IDENTIFIANTS_INVALIDES`, 409 `EMAIL_DEJA_UTILISE`, 429 `TROP_DE_TENTATIVES`, 400 `VALIDATION`,
+ * 400 `LIEN_COMPTE_INVALIDE` (lien expiré, déjà utilisé ou altéré).
  * Le jeton s'utilise avec POST /api/launch/{jeton}/visiteur pour relier une partie au visiteur.
  */
 #[Route('/api/visiteur', name: 'api_visiteur_')]
@@ -41,6 +51,10 @@ final class VisiteurController extends AbstractController
         private readonly CompteVisiteur $comptes,
         #[Autowire(service: 'limiter.connexion_visiteur')] private readonly RateLimiterFactory $connexionLimiter,
         #[Autowire(service: 'limiter.inscription_visiteur')] private readonly RateLimiterFactory $inscriptionLimiter,
+        private readonly EmailsCompte $emails,
+        private readonly LienCompte $liens,
+        #[Autowire(service: 'limiter.mot_de_passe_oublie_ip')] private readonly RateLimiterFactory $oublieIpLimiter,
+        #[Autowire(service: 'limiter.mot_de_passe_oublie_email')] private readonly RateLimiterFactory $oublieEmailLimiter,
     ) {
     }
 
@@ -77,6 +91,7 @@ final class VisiteurController extends AbstractController
             $reponse = $this->tokens->issue($appareil) + ['appareil' => $secret];
         }
         $this->em->flush();
+        $this->emails->verification($visiteur, forcer: true);
 
         return $this->json(['visiteur' => self::profile($visiteur), ...$reponse], 201);
     }
@@ -98,6 +113,7 @@ final class VisiteurController extends AbstractController
             return new JsonResponse(['error' => 'Adresse e-mail ou mot de passe incorrect.', 'code' => 'IDENTIFIANTS_INVALIDES'], 401);
         }
         $limite->reset();
+        $this->emails->verification($visiteur); // compte pas encore vérifié : nouveau lien (fréquence limitée)
 
         [$appareil, $secret] = $this->tokens->creerAppareil($visiteur);
         $this->em->flush();
@@ -105,6 +121,76 @@ final class VisiteurController extends AbstractController
         $this->em->flush();
 
         return $this->json(['visiteur' => self::profile($visiteur), ...$reponse, 'appareil' => $secret]);
+    }
+
+    #[Route('/email/renvoyer', name: 'email_renvoyer', methods: ['POST'])]
+    public function renvoyerVerification(Request $request): JsonResponse
+    {
+        $visiteur = $this->tokens->fromRequest($request);
+        if (null === $visiteur || CompteVisiteur::TYPE !== $visiteur->getType()) {
+            return self::nonIdentifie('Connectez-vous à votre compte.');
+        }
+
+        return new JsonResponse([
+            'emailVerifie' => null !== $visiteur->getEmailVerifieAt(),
+            'envoye' => $this->emails->verification($visiteur),
+        ], 202);
+    }
+
+    #[Route('/email/verifier', name: 'email_verifier', methods: ['POST'])]
+    public function verifierEmail(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $visiteur = $this->liens->verifier(LienCompte::VERIFICATION, \is_array($data) ? (string) ($data['jeton'] ?? '') : '');
+        if (null === $visiteur) {
+            return self::lienInvalide();
+        }
+        $this->comptes->confirmerEmail($visiteur);
+
+        return $this->json(['emailVerifie' => true]);
+    }
+
+    #[Route('/mot-de-passe/oublie', name: 'mot_de_passe_oublie', methods: ['POST'])]
+    public function motDePasseOublie(Request $request): JsonResponse
+    {
+        if (!$this->oublieIpLimiter->create((string) $request->getClientIp())->consume()->isAccepted()) {
+            return self::tropDeTentatives();
+        }
+        $data = json_decode($request->getContent(), true);
+        $email = \is_array($data) ? mb_strtolower(trim((string) ($data['email'] ?? ''))) : '';
+        if (!filter_var($email, \FILTER_VALIDATE_EMAIL)) {
+            return new JsonResponse(['error' => 'Adresse e-mail invalide.', 'code' => 'VALIDATION'], 400);
+        }
+        // Ne rien révéler : même réponse que le compte existe ou non, et au-delà de la limite par adresse
+        $visiteur = $this->comptes->compteParEmail($email);
+        if (null !== $visiteur && $this->oublieEmailLimiter->create($email)->consume()->isAccepted()) {
+            $this->emails->reinitialisation($visiteur);
+        }
+
+        return new JsonResponse(['message' => 'Si un compte existe avec cette adresse, un e-mail vient de lui être envoyé.'], 202);
+    }
+
+    #[Route('/mot-de-passe/reinitialiser', name: 'mot_de_passe_reinitialiser', methods: ['POST'])]
+    public function reinitialiserMotDePasse(Request $request): JsonResponse
+    {
+        $data = json_decode($request->getContent(), true);
+        $data = \is_array($data) ? $data : [];
+        $visiteur = $this->liens->verifier(LienCompte::MOT_DE_PASSE, (string) ($data['jeton'] ?? ''));
+        if (null === $visiteur) {
+            return self::lienInvalide();
+        }
+        try {
+            $this->comptes->reinitialiserMotDePasse($visiteur, (string) ($data['motDePasse'] ?? ''), $this->tokens);
+        } catch (CompteRefuse $e) {
+            return new JsonResponse(['error' => $e->getMessage(), 'code' => $e->codeMetier], 400);
+        }
+
+        return $this->json(['message' => 'Mot de passe changé : connectez-vous avec le nouveau.']);
+    }
+
+    private static function lienInvalide(): JsonResponse
+    {
+        return new JsonResponse(['error' => 'Ce lien n\'est plus valable (expiré ou déjà utilisé) : demandez-en un nouveau.', 'code' => 'LIEN_COMPTE_INVALIDE'], 400);
     }
 
     private static function tropDeTentatives(): JsonResponse

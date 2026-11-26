@@ -767,9 +767,29 @@ await api.auth.connecter({ mode: 'compte' });                      // plus tard,
 
 Erreurs (module d'erreurs) : `IDENTIFIANTS_INVALIDES` (message identique que l'adresse existe ou non),
 `EMAIL_DEJA_UTILISE`, `TROP_DE_TENTATIVES` (10 échecs en 15 min par adresse), `VALIDATION` (mot de passe de moins de
-8 caractères, adresse invalide). L'adresse n'apparaît jamais dans le profil public. Vérification d'adresse et
-« mot de passe oublié » par e-mail : quand l'envoi d'e-mails sera branché ; en attendant, l'admin définit un nouveau mot
-de passe (Admin › Visiteurs).
+8 caractères, adresse invalide). L'adresse n'apparaît jamais dans le profil public.
+
+#### E-mails de compte (vérification, mot de passe oublié)
+
+Navinum envoie lui-même les e-mails ; les liens ouvrent des pages de Navinum (`/compte/…`) : l'interactif n'a rien à
+héberger.
+
+```javascript
+// « Mot de passe oublié ? » : même réponse que le compte existe ou non → afficher le message tel quel
+const { message } = await api.auth.motDePasseOublie(champEmail.value);
+
+// Vérification de l'adresse : un lien part à l'inscription et à la connexion d'un compte non vérifié
+await api.auth.renvoyerVerification();                // { emailVerifie, envoye } — 3 e-mails par 24 h au plus
+
+// Facultatif : un interactif qui gère lui-même la page du lien
+await api.auth.reinitialiserMotDePasse(jeton, nouveauMotDePasse);
+```
+
+- Lien de vérification : 48 h ; lien de mot de passe : **1 h, une seule fois**. Le nouveau mot de passe déconnecte
+  le compte de tous ses appareils.
+- Erreurs : `LIEN_COMPTE_INVALIDE` (expiré, déjà utilisé), `TROP_DE_TENTATIVES` (10 demandes par heure et par
+  appareil ; au-delà de 3 par adresse, rien n'est envoyé, sans le dire).
+- L'administration peut toujours définir un nouveau mot de passe (Admin › Visiteurs).
 
 ### Connexion par Google, Microsoft, Facebook… (OAuth)
 

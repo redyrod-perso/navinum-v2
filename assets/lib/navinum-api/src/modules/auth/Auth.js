@@ -217,6 +217,50 @@ export class Auth {
     }
 
     /**
+     * « Mot de passe oublié » : Navinum envoie à l'adresse un lien (valable 1 h, une seule fois) vers sa page de
+     * nouveau mot de passe. La réponse est la même que le compte existe ou non : afficher un message neutre.
+     *
+     * @param {string} email
+     * @returns {Promise<{message: string}>}
+     * @throws {NavinumAPIError} `VALIDATION`, `TROP_DE_TENTATIVES`
+     *
+     * @example
+     * const { message } = await api.auth.motDePasseOublie(champEmail.value);
+     * zoneInfo.textContent = message; // « Si un compte existe avec cette adresse, un e-mail vient de lui être envoyé. »
+     */
+    async motDePasseOublie(email) {
+        return this.api.visiteurs.motDePasseOublie(String(email || '').trim());
+    }
+
+    /**
+     * Nouveau mot de passe depuis un interactif qui gère lui-même la page du lien (sinon, la page de Navinum
+     * s'en charge). Toutes les sessions du compte sont révoquées : le joueur se reconnecte ensuite.
+     *
+     * @param {string} jeton - Jeton du lien reçu par e-mail
+     * @param {string} motDePasse - 8 caractères au moins
+     * @returns {Promise<{message: string}>}
+     * @throws {NavinumAPIError} `LIEN_COMPTE_INVALIDE`, `VALIDATION`
+     */
+    async reinitialiserMotDePasse(jeton, motDePasse) {
+        return this.api.visiteurs.reinitialiserMotDePasse(jeton, motDePasse);
+    }
+
+    /**
+     * Renvoie l'e-mail de vérification de l'adresse du compte connecté (un lien part déjà à l'inscription et à la
+     * connexion d'un compte non vérifié ; 3 e-mails par 24 h au plus).
+     *
+     * @returns {Promise<{emailVerifie: boolean, envoye: boolean}>}
+     * @throws {NavinumAPIError} `NON_IDENTIFIE` sans compte connecté
+     */
+    async renvoyerVerification() {
+        const joueur = this.joueurCourant;
+        if (!joueur || joueur.mode !== 'compte' || !joueur.token) {
+            throw erreurs.creer('NON_IDENTIFIE', 'Connectez-vous à votre compte.');
+        }
+        return this.api.visiteurs.renvoyerVerification(joueur.token);
+    }
+
+    /**
      * Rattache la partie lancée au joueur (jamais bloquant) puis le déclare connecté.
      * @private
      */

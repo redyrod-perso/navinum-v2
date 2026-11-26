@@ -44,7 +44,9 @@
         <p>
             <button id="connecter-compte">Se connecter</button>
             <button id="creer-compte">Créer un compte</button>
+            <button id="mot-de-passe-oublie" type="button">Mot de passe oublié ?</button>
         </p>
+        <p id="info-compte" class="discret" role="status" hidden></p>
         <p class="discret">Connecté en invité ? « Créer un compte » garde vos XP et médailles.</p>
         <!-- Un bouton par fournisseur activé sur le serveur (Google, Microsoft, Facebook…) -->
         <p id="fournisseurs"></p>
@@ -106,6 +108,16 @@
             try {
                 // Consentement explicite : la case n'est jamais cochée par défaut
                 await api.auth.creerCompte({ ...compte(), newsletter: $('newsletter').checked });
+            } catch (err) { afficherErreur(err); }
+        });
+        // Mot de passe oublié : Navinum envoie le lien et héberge la page du nouveau mot de passe.
+        // Le message est le même que le compte existe ou non : l'afficher tel quel.
+        $('mot-de-passe-oublie').addEventListener('click', async () => {
+            $('erreur').hidden = true;
+            try {
+                const { message } = await api.auth.motDePasseOublie($('email').value);
+                $('info-compte').textContent = message;
+                $('info-compte').hidden = false;
             } catch (err) { afficherErreur(err); }
         });
         $('pas-moi').addEventListener('click', () => { api.auth.oublier(); $('pseudo').value = ''; });
