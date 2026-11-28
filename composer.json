@@ -31,7 +31,7 @@
         "symfony/http-client": "7.4.*",
         "symfony/intl": "7.4.*",
         "symfony/mailer": "7.4.*",
-        "symfony/mercure-bundle": "^0.4.3",
+        "symfony/mercure-bundle": "^0.7.0",
         "symfony/mime": "7.4.*",
         "symfony/monolog-bundle": "^3.11.2",
         "symfony/notifier": "7.4.*",
