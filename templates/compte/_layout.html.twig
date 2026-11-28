@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {# Le jeton est dans l'adresse : ne jamais le transmettre à un autre site #}
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex">
+    <title>{% block title %}{% endblock %} · Navinum</title>
+    <style>
+        body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f4f5f7; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1f2937; }
+        main { width: min(420px, calc(100% - 32px)); background: #fff; border-radius: 12px; padding: 32px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+        h1 { font-size: 1.35rem; margin: 0 0 12px; }
+        p { line-height: 1.5; }
+        label { display: block; font-weight: 600; margin: 16px 0 6px; }
+        input { width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 1rem; border: 1px solid #cbd5e1; border-radius: 6px; }
+        button { margin-top: 20px; width: 100%; padding: 12px; font-size: 1rem; border: 0; border-radius: 6px; background: #0d6efd; color: #fff; cursor: pointer; }
+        .erreur { background: #fde8e8; color: #9b1c1c; padding: 10px 12px; border-radius: 6px; }
+        .ok { color: #046c4e; }
+        .aide { font-size: .9rem; color: #6b7280; }
+    </style>
+</head>
+<body><main>{% block contenu %}{% endblock %}</main></body>
+</html>

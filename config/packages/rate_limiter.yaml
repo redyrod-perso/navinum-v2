@@ -11,11 +11,29 @@ framework:
             policy: sliding_window
             limit: 20
             interval: '1 hour'
+        # Mot de passe oublié (#71) : demandes par IP (refus 429) ; par adresse, au-delà rien n'est envoyé (même réponse)
+        mot_de_passe_oublie_ip:
+            policy: sliding_window
+            limit: 10
+            interval: '1 hour'
+        mot_de_passe_oublie_email:
+            policy: sliding_window
+            limit: 3
+            interval: '1 hour'
+        # E-mails de vérification d'adresse, par compte (#71)
+        email_verification:
+            policy: sliding_window
+            limit: 3
+            interval: '24 hours'
 
 when@test:
     framework:
         rate_limiter:
             inscription_visiteur:
+                policy: sliding_window
+                limit: 100000
+                interval: '1 hour'
+            mot_de_passe_oublie_ip:
                 policy: sliding_window
                 limit: 100000
                 interval: '1 hour'

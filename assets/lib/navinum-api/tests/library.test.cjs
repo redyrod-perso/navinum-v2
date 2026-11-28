@@ -784,6 +784,36 @@ test('auth : créer un compte depuis un invité (même visiteur), se connecter, 
     assert.equal(NavinumAPI.erreurs.decrire(new NavinumAPI.NavinumAPIError('x', 429)).code, 'TROP_DE_TENTATIVES');
 });
 
+// --- #71 : e-mails de compte -------------------------------------------------------------------
+
+test('auth : mot de passe oublié, réinitialisation, renvoi de la vérification', async () => {
+    const dans30 = () => new Date(Date.now() + 1800e3).toISOString();
+    const api = makeApi({
+        'POST /api/visiteur/mot-de-passe/oublie': { status: 202, body: { message: 'Si un compte existe avec cette adresse, un e-mail vient de lui être envoyé.' } },
+        'POST /api/visiteur/mot-de-passe/reinitialiser': (call) => (call.body.jeton === 'bon'
+            ? { status: 200, body: { message: 'ok' } }
+            : { status: 400, body: { error: 'Ce lien n’est plus valable', code: 'LIEN_COMPTE_INVALIDE' } }),
+        'POST /api/visiteur/connexion': { status: 200, body: { visiteur: { id: 'v1', pseudo: 'Tom', anonyme: false }, token: 'nvv2.compte', expiresAt: dans30(), appareil: 'nva1.x' } },
+        'POST /api/visiteur/email/renvoyer': { status: 202, body: { emailVerifie: false, envoye: true } },
+    });
+
+    const { message } = await api.auth.motDePasseOublie('  tom@exemple.test ');
+    assert.match(message, /Si un compte existe/);
+    assert.deepEqual(fetch.calls.find((c) => c.path === '/api/visiteur/mot-de-passe/oublie').body, { email: 'tom@exemple.test' });
+
+    assert.equal((await api.auth.reinitialiserMotDePasse('bon', 'nouveau-456')).message, 'ok');
+    const refus = await api.auth.reinitialiserMotDePasse('vieux', 'nouveau-456').catch((e) => e);
+    const info = NavinumAPI.erreurs.decrire(refus);
+    assert.equal(info.code, 'LIEN_COMPTE_INVALIDE');
+    assert.equal(info.titre, 'Lien plus valable');
+
+    const sansCompte = await api.auth.renvoyerVerification().catch((e) => e);
+    assert.equal(NavinumAPI.erreurs.decrire(sansCompte).code, 'NON_IDENTIFIE');
+    await api.auth.connecter({ mode: 'compte', email: 'tom@exemple.test', motDePasse: 'secret-123' });
+    assert.deepEqual(await api.auth.renvoyerVerification(), { emailVerifie: false, envoye: true });
+    assert.equal(fetch.calls.find((c) => c.path === '/api/visiteur/email/renvoyer').headers.Authorization, 'Bearer nvv2.compte');
+});
+
 // --- #4 : OAuth multi-fournisseurs ----------------------------------------------------------------
 
 test('auth oauth : départ vers le fournisseur (joueur connecté transmis), retour, échange, rattachement', async () => {

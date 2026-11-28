@@ -1,0 +1,7 @@
+{% extends 'emails/_layout.html.twig' %}
+{% block contenu %}
+    <h1 style="font-size:20px;margin:0 0 16px">Bonjour {{ pseudo }},</h1>
+    <p>Vous avez demandé à changer le mot de passe de votre compte Navinum.</p>
+    {% include 'emails/_bouton.html.twig' with { libelle: 'Choisir un nouveau mot de passe' } %}
+    <p style="font-size:13px;color:#6b7280">Ce lien est valable 1 heure et ne sert qu'une fois. Une fois le mot de passe changé, vous serez déconnecté de tous vos appareils.</p>
+{% endblock %}

@@ -130,6 +130,48 @@ export class VisiteurAPI extends BaseResource {
     }
 
     /**
+     * Renvoie le lien de vérification de l'adresse du compte connecté (3 e-mails par 24 h au plus).
+     * @param {string} token - Jeton visiteur d'un compte
+     * @returns {Promise<{emailVerifie: boolean, envoye: boolean}>}
+     * @throws {UnauthorizedError} code `NON_IDENTIFIE` (pas un compte, ou jeton expiré)
+     */
+    async renvoyerVerification(token) {
+        return this.client.post('/api/visiteur/email/renvoyer', {}, { headers: { Authorization: `Bearer ${token}` } });
+    }
+
+    /**
+     * Confirme l'adresse avec le jeton du lien reçu par e-mail.
+     * @param {string} jeton
+     * @returns {Promise<{emailVerifie: true}>}
+     * @throws {ValidationError} code `LIEN_COMPTE_INVALIDE`
+     */
+    async verifierEmail(jeton) {
+        return this.client.post('/api/visiteur/email/verifier', { jeton });
+    }
+
+    /**
+     * Demande un lien de réinitialisation du mot de passe. Même réponse que le compte existe ou non.
+     * @param {string} email
+     * @returns {Promise<{message: string}>}
+     * @throws {ValidationError} code `VALIDATION` ; {NavinumAPIError} `TROP_DE_TENTATIVES` (429)
+     */
+    async motDePasseOublie(email) {
+        return this.client.post('/api/visiteur/mot-de-passe/oublie', { email });
+    }
+
+    /**
+     * Nouveau mot de passe avec le jeton du lien reçu par e-mail (1 h, une seule fois) ; toutes les sessions du
+     * compte sont révoquées.
+     * @param {string} jeton
+     * @param {string} motDePasse - 8 caractères au moins
+     * @returns {Promise<{message: string}>}
+     * @throws {ValidationError} codes `LIEN_COMPTE_INVALIDE`, `VALIDATION`
+     */
+    async reinitialiserMotDePasse(jeton, motDePasse) {
+        return this.client.post('/api/visiteur/mot-de-passe/reinitialiser', { jeton, motDePasse });
+    }
+
+    /**
      * Fournisseurs OAuth actifs sur ce Navinum (Google, Microsoft, Facebook… selon la configuration du serveur).
      * @returns {Promise<Array<{nom: string, libelle: string}>>}
      */

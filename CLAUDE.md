@@ -481,11 +481,20 @@ valeurs `default`) et modifiable par parcours dans l'admin (Parcours → Interac
 - **Comptes en ligne (#4)** : `POST /api/visiteur/inscription` `{email, motDePasse, pseudo?, newsletter?}` (Bearer d'un
   invité facultatif : il **devient** le compte, mêmes XP) et `POST /api/visiteur/connexion` `{email, motDePasse}` → même
   jeton visiteur. Service `CompteVisiteur` : adresse unique en minuscules (`uniq_visiteur_email`), mot de passe haché
-  (hasher `visiteur`, champ `password_son`), newsletter seulement sur consentement explicite, `emailVerifieAt` (null
-  tant que l'envoi d'e-mails n'est pas branché). Refus : `IDENTIFIANTS_INVALIDES` (message identique compte existant
+  (hasher `visiteur`, champ `password_son`), newsletter seulement sur consentement explicite, `emailVerifieAt`
+  (renseignée par le lien de vérification envoyé par e-mail, #71). Refus : `IDENTIFIANTS_INVALIDES` (message identique compte existant
   ou non), `EMAIL_DEJA_UTILISE`, `TROP_DE_TENTATIVES` (rate limiter `connexion_visiteur` 10 échecs / 15 min par IP +
   adresse ; `inscription_visiteur` 20 / h par IP). Admin › Visiteurs : champ « Nouveau mot de passe » (haché ; plus
   jamais d'affichage du mot de passe). Côté JS : mode `compte`, `api.auth.creerCompte()`.
+- **E-mails de compte (#71)** : `EmailsCompte` (Symfony Mailer, envoi **par le worker** via Messenger ; Brevo en prod
+  avec `MAILER_DSN=brevo+api://…` et `MAILER_FROM` dans le `.env` du VPS ; **Mailpit en local**, http://localhost:8025,
+  jamais d'envoi réel ; `null://null` par défaut). Liens signés sans stockage (`LienCompte`, HMAC `APP_SECRET` +
+  empreinte du compte) vers les pages publiques `/compte/email/{jeton}` (48 h) et `/compte/mot-de-passe/{jeton}` (1 h,
+  usage unique car lié au hachage du mot de passe ; révoque toutes les sessions). Vérification envoyée à l'inscription
+  et à la connexion d'un compte non vérifié (3 / 24 h). API : `POST /api/visiteur/mot-de-passe/oublie {email}` (202,
+  réponse identique compte ou non ; 10 / h par IP, 3 / h par adresse en silence), `…/mot-de-passe/reinitialiser
+  {jeton, motDePasse}`, `…/email/verifier {jeton}`, `…/email/renvoyer` (Bearer) ; refus `LIEN_COMPTE_INVALIDE`. JS :
+  `api.auth.motDePasseOublie()`, `reinitialiserMotDePasse()`, `renvoyerVerification()`.
 - **OAuth multi-fournisseurs (#4)** : `App\OAuth\FournisseursOAuth` (préréglages Google, Microsoft, Facebook ; un
   fournisseur est actif dès que `OAUTH_<NOM>_ID` et `OAUTH_<NOM>_SECRET` sont dans les `.env` du serveur, jamais dans
   le dépôt ; adresse de redirection à déclarer chez lui : `https://<site>/api/visiteur/oauth/<nom>/retour`).
@@ -601,8 +610,8 @@ Idées et décisions validées avec le porteur du projet (à transformer en tick
 - Tous délivrent le même **jeton Bearer** visiteur (format actuel `nvv2.…` : expiration, révocation et
   rafraîchissement — faits en #6). Le pare-feu `api` (sans session) recevra l'authentificateur correspondant.
 - Actuel : visiteur invité par pseudo, session de 30 min (12 h au plus), profil repris sur le même appareil (#6) ;
-  comptes e-mail + mot de passe et OAuth Google / Microsoft / Facebook (#4). À venir : e-mails de compte via Brevo
-  (#71), badge RFID (#5), Apple (compte développeur payant).
+  comptes e-mail + mot de passe et OAuth Google / Microsoft / Facebook (#4), e-mails de compte via Brevo (#71).
+  À venir : badge RFID (#5), Apple (compte développeur payant).
 
 ### Gamification (XP, médailles) — implémentée (#7)
 
